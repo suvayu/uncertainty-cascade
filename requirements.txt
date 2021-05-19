@@ -1,0 +1,4 @@
+friendly_data
+pandas
+pycountry
+xarray
