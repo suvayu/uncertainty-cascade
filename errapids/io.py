@@ -94,10 +94,3 @@ def decode_fname(fname: str) -> _scenario_t:
     charging = remap(tokens[2])
     # return f"{heating}_{charging}"
     return heating, charging
-
-
-def read_csvs_to_dst(dirpath: _path_t, files: Iterable[Path] = []):
-    dirpath = Path(dirpath)
-    files = chain(dirpath.glob("*.csv"), files)
-    dfs = {decode_fname(f.stem): read_csv_to_df(f) for f in files}
-    return xr.Dataset(dfs)
