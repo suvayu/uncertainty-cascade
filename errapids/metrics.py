@@ -1,9 +1,11 @@
-from typing import Union
+from itertools import chain
+from pathlib import Path
+from typing import Iterable, Union
 
 import pandas as pd
 import xarray as xr
 
-from errapids.io import _path_t
+from errapids.io import _path_t, decode_fname
 
 
 class Metrics:
@@ -85,3 +87,42 @@ class Metrics:
             else:
                 raise ValueError(msg)
         return idx
+
+
+class ScenarioGroups:
+    """Hierachically group model results for different scenarios"""
+
+    @classmethod
+    def from_dir(cls, dpath: _path_t, glob: str) -> "ScenarioGroups":
+        return cls.from_netcdfs(Path(dpath).glob(glob))
+
+    @classmethod
+    def from_netcdfs(cls, fpaths: Iterable[_path_t]) -> "ScenarioGroups":
+        return cls(map(xr.open_dataset, fpaths))
+
+    def __init__(self, scenarios: Iterable[xr.Dataset]):
+        self._scenarios = {
+            dst.scenario: (
+                # first override: building heating, EV charging
+                decode_fname(dst.applied_overrides.split(";")[0]),
+                Metrics(dst),
+            )
+            for dst in scenarios
+        }
+
+    def __repr__(self) -> str:
+        return "\n---\n".join(
+            f"Scenario: {v[0]}\n{v[1]}" for v in self._scenarios.values()
+        )
+
+    def __getitem__(self, metric: str) -> pd.Series:
+        df = pd.concat(
+            [
+                metrics[metric].to_frame().assign(heating=lvls[0], EV=lvls[1])
+                for lvls, metrics in self._scenarios.values()
+            ],
+            axis=0,
+        ).set_index(["heating", "EV"], append=True)
+        nlvls = df.index.nlevels
+        new_order = list(chain(range(nlvls)[-2:], range(nlvls)[:-2]))
+        return df.reorder_levels(new_order)[metric]
