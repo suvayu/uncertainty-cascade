@@ -1,0 +1,67 @@
+technology,description
+ac_ohl_mountain_transmission,High voltage overhead AC transmission line through the mountains
+ac_ohl_transmission,High voltage overhead AC transmission line
+battery,Battery storage
+biofuel_boiler,Biomass boiler
+biofuel_heat_storage_small,Small water tank
+biofuel_supply,Biofuel
+biofuel_tech_heat_to_demand,Convert different building heat types to heat for storage
+biofuel_to_diesel,Biofuel to vehicle fuel (we only consider diesel) converter
+biofuel_to_gas_and_liquids,Biofuel to liquid and gas fuels converter
+biofuel_to_liquids,Biofuel to liquid fuels converter
+biofuel_to_methane,Biofuel to Methane converter
+biofuel_to_methanol,Biofuel to Methanol converter
+ccgt,Combined cycle gas turbine
+chp_biofuel_extraction,Centralised biofuel steam extraction turbine combined heat and power
+chp_biofuel_extraction_heat_storage_big,Big water tank (3000L)
+chp_biofuel_extraction_tech_heat_to_demand,Convert different building heat types to heat for storage
+chp_methane_extraction,Centralised gas steam extraction turbine combined heat and power
+chp_methane_extraction_heat_storage_big,Big water tank (3000L)
+chp_methane_extraction_tech_heat_to_demand,Convert different building heat types to heat for storage
+chp_wte_back_pressure,Centralised waste stream back pressure combined heat and power
+chp_wte_back_pressure_heat_storage_big,Big water tank (3000L)
+chp_wte_back_pressure_tech_heat_to_demand,Convert different building heat types to heat for storage
+dac,Direct air CO2 capture
+dc_ohl_transmission,DC overhead power transmission
+dc_subsea_transmission,DC subsea power transmission
+dc_underground_transmission,DC underground power transmission
+demand_cooking,Cooking demand
+demand_elec,Electricity demand
+demand_heat,Heat demand
+demand_heavy_transport,Heavy vehicle demand
+demand_industry_diesel,Shipping transport and industry backup generator demand
+demand_industry_kerosene,Air transport kerosene demand
+demand_industry_methane,Industry high enthalpy process methane demand
+demand_industry_methanol,Industry methane feedstock demand
+demand_light_transport,Light vehicle transport demand
+electric_heater,Electrical heater
+electric_heater_heat_storage_small,Small water tank
+electric_heater_tech_heat_to_demand,Convert different building heat types to heat for storage
+electric_hob,Electric cooking element
+electrolysis,Hydrogen by electrolysis
+gas_hob,Electric cooking element
+heavy_transport_ev,Electric heavy vehicles
+heavy_transport_ice,Internal combustion engine heavy vehicles
+hp,Heat pump
+hp_heat_storage_small,Small water tank
+hp_tech_heat_to_demand,Convert different building heat types to heat for storage
+hydro_reservoir,Hydro electricity with a reservoir.
+hydro_run_of_river,Run of river hydro electricity
+hydrogen_storage,Hydrogen power storage
+hydrogen_to_liquids,Hydrogen to liquid fuels converter
+hydrogen_to_methane,Hydrogen to Methane converter
+hydrogen_to_methanol,Hydrogen to Methanol converter
+light_transport_ev,Electric light vehicles
+light_transport_ice,Internal combustion engine light vehicles
+methane_boiler,Gas boiler
+methane_heat_storage_small,Small water tank
+methane_storage,Underground methane storage
+methane_tech_heat_to_demand,Convert different building heat types to heat for storage
+nuclear,Nuclear power
+open_field_pv,Open field PV
+pumped_hydro,Pumped hydro power storage
+roof_mounted_pv,Roof mounted PV
+waste_supply,Municipal waste supply
+wind_offshore,Offshore wind
+wind_onshore_competing,Onshore wind competing with open field PV on land
+wind_onshore_monopoly,Onshore wind without land competition
