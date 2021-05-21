@@ -131,3 +131,14 @@ class ScenarioGroups:
         # 2 levels of scenarios: heating, EV; move them forward
         new_order = list(chain(range(nlvls)[-2:], range(nlvls)[:-2]))
         return df.reorder_levels(new_order)[metric]
+
+
+def fraction_by_level(arr: pd.Series, lvl: Union[int, str]) -> pd.Series:
+    """Calculate the fraction out of the total for a given level"""
+    _lvl = arr.index.names.index(lvl) if isinstance(lvl, str) else lvl
+    # sum over any deeper levels
+    numerator = arr.groupby(level=list(range(_lvl + 1))).sum()
+    # sum over desired level to get reference
+    denominator = arr.groupby(level=list(range(_lvl))).sum()
+    numerator, denominator = numerator.align(denominator, method="ffill")
+    return numerator / denominator
