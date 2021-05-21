@@ -2,6 +2,7 @@ from itertools import chain
 from pathlib import Path
 from typing import Iterable, Union
 
+from glom import glom, Iter
 import pandas as pd
 import xarray as xr
 
@@ -78,12 +79,12 @@ class Metrics:
         idx = _idx.str.split("::", expand=True)
         if "carrier" in _idx.name:
             if idx.nlevels == 3:
-                idx.names = ["location", "technology", "carrier"]
+                idx.names = ["region", "technology", "carrier"]
             else:
                 raise ValueError(msg)
         else:
             if idx.nlevels == 2:
-                idx.names = ["location", "technology"]
+                idx.names = ["region", "technology"]
             else:
                 raise ValueError(msg)
         return idx
@@ -109,6 +110,9 @@ class ScenarioGroups:
             )
             for dst in scenarios
         }
+        self.varnames = glom(
+            self._scenarios.values(), (Iter("1._dst.data_vars").first(), list)
+        )
 
     def __repr__(self) -> str:
         return "\n---\n".join(
@@ -124,5 +128,6 @@ class ScenarioGroups:
             axis=0,
         ).set_index(["heating", "EV"], append=True)
         nlvls = df.index.nlevels
+        # 2 levels of scenarios: heating, EV; move them forward
         new_order = list(chain(range(nlvls)[-2:], range(nlvls)[:-2]))
         return df.reorder_levels(new_order)[metric]
