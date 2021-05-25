@@ -4,30 +4,34 @@ from itertools import product
 from pathlib import Path
 from typing import Dict
 
+from glom import glom, Assign
+
 
 def get_demand_profiles(config: Dict, demand_profile_dir: str, output: str) -> Dict:
     _output = Path(output)
-    return {
-        f"{path.stem}": {
-            "locations": {
-                country: {"exists": False}
+    return glom(
+        {},
+        tuple(
+            Assign(
+                f"{path.stem}.locations.{country}",
+                {"exists": False}
                 # NOTE: not in demand profiles from DESTINEE, but present in
                 # euro-calliope
                 if country in ["CYP", "MNE"]
-                else {
-                    "techs": {
-                        "demand_elec": {
-                            "constraints": {
-                                "resource": f"file={path.relative_to(_output.parent)}:{country}"
-                            }
-                        }
-                    }
-                }
-                for country in config["locations"].keys()
-            }
-        }
-        for path in Path(demand_profile_dir).glob("*.csv")
-    }
+                else glom(
+                    {},
+                    Assign(
+                        "techs.demand_elec.constraints.resource",
+                        f"file={path.relative_to(_output.parent)}:{country}",
+                        missing=dict,
+                    ),
+                ),
+                missing=dict,
+            )
+            for path in Path(demand_profile_dir).glob("*.csv")
+            for country in config["locations"].keys()
+        ),
+    )
 
 
 def get_time_spans() -> Dict:
