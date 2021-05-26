@@ -3,12 +3,11 @@
 from collections import Counter
 from itertools import product, chain
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Iterable, List
 
-from glom import glom, Assign
+from glom import glom, Assign, Match
 
 
-def get_demand_profiles(config: Dict, demand_profile_dir: str, output: str) -> Dict:
 def merge_dicts(confs: List[Dict]) -> Dict:
     """Merge a sequence of dictionaries
 
@@ -64,6 +63,9 @@ def merge_dicts(confs: List[Dict]) -> Dict:
     return res
 
 
+def get_demand_profiles(
+    locations: Iterable[str], demand_profile_dir: str, output: str
+) -> Dict:
     _output = Path(output)
     return glom(
         {},
@@ -85,7 +87,78 @@ def merge_dicts(confs: List[Dict]) -> Dict:
                 missing=dict,
             )
             for path in Path(demand_profile_dir).glob("*.csv")
-            for country in config["locations"].keys()
+            for country in locations
+        ),
+    )
+
+
+def vary_costs(
+    basename: str,
+    ref: Dict,
+    techs: List[str],
+    techgrps: List[str],
+    costs: List[str],
+    factors: List[float],
+    cost_t: str = "monetary",
+) -> Dict:
+    """Vary `costs` by `factors` and generate an override for every variation
+
+    Parameters
+    ----------
+    basename : str
+        basename for override
+
+    ref : Dict
+        Reference dictionary
+
+    techs : List[str]
+        Technology name
+
+    techgrps : List[str]
+        Technology group name
+
+    costs : List[str]
+        List of costs to vary
+
+    factors : List[float]
+        Multiplicative factors to vary the costs
+
+    cost_t : str (default: monetary)
+        Cost type
+
+    Returns
+    -------
+    Dict
+        A dictionary populated with all the overrides
+
+    """
+    _match = Match(
+        {
+            **{
+                f"{tech}": {
+                    "costs": {f"{cost_t}": {c: object for c in costs + [str]}},
+                    str: object,
+                }
+                for tech in chain(techs, techgrps)
+            },
+            str: dict,
+        }
+    )
+    glom(ref, _match)  # validate
+    eof_techs = len(techs)
+    return glom(
+        {},
+        tuple(
+            Assign(
+                f"{basename}{i}.techs.{tech}.costs.{cost_t}.{c}"
+                if j < eof_techs
+                else f"{basename}{i}.tech_grps.{tech}.costs.{cost_t}.{c}",
+                glom(ref, f"{tech}.costs.{cost_t}.{c}") * f,
+                missing=dict,
+            )
+            for i, f in enumerate(factors, start=1)
+            for j, tech in enumerate(chain(techs, techgrps))
+            for c in costs
         ),
     )
 
@@ -98,17 +171,44 @@ def get_time_spans() -> Dict:
     }
 
 
+def pick_one(overrides):
+    return list(overrides.keys())[0]
+
+
 def get_scenarios(config: Dict, demand_profile_dir: str, output: str) -> Dict:
-    demand_profiles = get_demand_profiles(config, demand_profile_dir, output)
+    demand_profiles = get_demand_profiles(
+        config["locations"].keys(), demand_profile_dir, output
+    )
+    config = merge_dicts([config["techs"], config["tech_groups"]])
+    pv_scenarios = vary_costs(
+        "pv", config, ["open_field_pv"], ["pv_on_roof"], ["energy_cap"], [1, 0.7, 0.5]
+    )
+    batt_scenarios = vary_costs(
+        "battery", config, ["battery"], [], ["energy_cap", "storage_cap"], [1, 0.7, 0.5]
+    )
     time_spans = get_time_spans()
     scenarios = {
         "scenarios": {
-            f"scenario{i+1}": list(v)
-            for i, v in enumerate(product(demand_profiles, ("yearmin1day",)))
+            f"scenario{i+1:02d}": list(v)
+            for i, v in enumerate(
+                product(demand_profiles, pv_scenarios, batt_scenarios, ("yearmin1day",))
+            )
         },
-        "overrides": {**demand_profiles, **time_spans},
+        "overrides": {
+            **demand_profiles,
+            **pv_scenarios,
+            **batt_scenarios,
+            **time_spans,
+        },
     }
     scenarios["scenarios"].update(
-        {"test": [list(demand_profiles.keys())[0], "janweek1"]}
+        {
+            "test": [
+                pick_one(demand_profiles),
+                pick_one(pv_scenarios),
+                pick_one(batt_scenarios),
+                "janweek1",
+            ]
+        }
     )
     return scenarios
