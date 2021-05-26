@@ -152,7 +152,7 @@ def vary_costs(
             Assign(
                 f"{basename}{i}.techs.{tech}.costs.{cost_t}.{c}"
                 if j < eof_techs
-                else f"{basename}{i}.tech_grps.{tech}.costs.{cost_t}.{c}",
+                else f"{basename}{i}.tech_groups.{tech}.costs.{cost_t}.{c}",
                 glom(ref, f"{tech}.costs.{cost_t}.{c}") * f,
                 missing=dict,
             )
