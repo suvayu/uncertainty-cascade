@@ -15,7 +15,7 @@ requirements = list(
 
 setup(
     name="errapids",
-    version="0.1",
+    version="0.1.5",
     description="Propagate uncertainty across models",
     packages=find_packages(exclude=["doc", "testing", "tests", "data", "expt", "tmp"]),
     install_requires=requirements,
