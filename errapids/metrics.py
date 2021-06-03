@@ -1,6 +1,6 @@
 from itertools import chain
 from pathlib import Path
-from typing import Iterable, Union
+from typing import Iterable, Tuple, Union
 
 from glom import glom, Iter
 import pandas as pd

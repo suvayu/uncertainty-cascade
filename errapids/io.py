@@ -2,14 +2,12 @@
 
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Tuple, Union
+from typing import Tuple, Union
 
 import pandas as pd
 from pycountry import countries
-import xarray as xr
 
 _path_t = Union[str, Path]
-_scenario_t = Tuple[str, str]
 
 
 class alias_dict(dict):
@@ -79,7 +77,7 @@ _flevel_aliases = {
 }
 
 
-def decode_fname(fname: str) -> _scenario_t:
+def decode_fname(fname: str) -> Tuple[str, str]:
     tokens = fname.lower().split("_")
 
     def remap(token: str) -> str:
