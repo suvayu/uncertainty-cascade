@@ -7,6 +7,7 @@ import pandas as pd
 import xarray as xr
 
 from errapids.io import _path_t, decode_fname
+from errapids.ons import pv_batt_lvls
 
 
 class Metrics:
@@ -93,6 +94,8 @@ class Metrics:
 class ScenarioGroups:
     """Hierachically group model results for different scenarios"""
 
+    idxcols = "heating,EV,PV,battery".split(",")
+
     @classmethod
     def from_dir(cls, dpath: _path_t, glob: str) -> "ScenarioGroups":
         return cls.from_netcdfs(Path(dpath).glob(glob))
@@ -101,11 +104,23 @@ class ScenarioGroups:
     def from_netcdfs(cls, fpaths: Iterable[_path_t]) -> "ScenarioGroups":
         return cls(map(xr.open_dataset, fpaths))
 
+    @classmethod
+    def __prettify__(cls, name: str) -> str:
+        factor = pv_batt_lvls[int(name[-1]) - 1]
+        return name[:-1] + "{:03d}".format(int(factor * 100))
+
+    @classmethod
+    def __unpack_overrides__(cls, overrides: str) -> Tuple[str, ...]:
+        lvls = overrides.split(";")[:-1]
+        # override order: 1) building heating, EV charging, 2) PV, 3) battery
+        heating, charging = decode_fname(lvls[0])
+        pv, battery = lvls[1:]
+        return heating, charging, cls.__prettify__(pv), cls.__prettify__(battery)
+
     def __init__(self, scenarios: Iterable[xr.Dataset]):
         self._scenarios = {
             dst.scenario: (
-                # first override: building heating, EV charging
-                decode_fname(dst.applied_overrides.split(";")[0]),
+                self.__unpack_overrides__(dst.applied_overrides),
                 Metrics(dst),
             )
             for dst in scenarios
@@ -122,14 +137,16 @@ class ScenarioGroups:
     def __getitem__(self, metric: str) -> pd.Series:
         df = pd.concat(
             [
-                metrics[metric].to_frame().assign(heating=lvls[0], EV=lvls[1])
+                metrics[metric]
+                .to_frame()
+                .assign(**{col: lvl for col, lvl in zip(self.idxcols, lvls)})
                 for lvls, metrics in self._scenarios.values()
             ],
             axis=0,
-        ).set_index(["heating", "EV"], append=True)
+        ).set_index(self.idxcols, append=True)
         nlvls = df.index.nlevels
-        # 2 levels of scenarios: heating, EV; move them forward
-        new_order = list(chain(range(nlvls)[-2:], range(nlvls)[:-2]))
+        # 4 levels of scenarios: heating, EV, PV, battery; move them forward
+        new_order = list(chain(range(nlvls)[-4:], range(nlvls)[:-4]))
         return df.reorder_levels(new_order)[metric]
 
 

@@ -184,25 +184,30 @@ def get_time_spans(to_yr: int) -> Dict:
     }
 
 
-def pick_one(overrides):
+def pick_one(overrides: Dict) -> str:
     return list(overrides.keys())[0]
 
 
-def get_scenarios(config: Dict, demand_profile_dir: str, output: str) -> Dict:
+pv_batt_lvls = [1, 0.7, 0.5]
+
+
+def get_scenarios(
+    config: Dict, demand_profile_dir: str, output: str, to_yr: int
+) -> Dict:
     demand_profiles = get_demand_profiles(
         config["locations"].keys(), demand_profile_dir, output
     )
     config = merge_dicts([config["techs"], config["tech_groups"]])
     pv_scenarios = vary_costs(
-        "pv", config, ["open_field_pv"], ["pv_on_roof"], ["energy_cap"], [1, 0.7, 0.5]
+        "pv", config, ["open_field_pv"], ["pv_on_roof"], ["energy_cap"], pv_batt_lvls
     )
     batt_scenarios = vary_costs(
-        "battery", config, ["battery"], [], ["energy_cap", "storage_cap"], [1, 0.7, 0.5]
+        "battery", config, ["battery"], [], ["energy_cap", "storage_cap"], pv_batt_lvls
     )
     time_spans = get_time_spans(to_yr)
     scenarios = {
         "scenarios": {
-            f"scenario{i+1:02d}": list(v)
+            f"scenario{i+1:d}": list(v)
             for i, v in enumerate(
                 product(demand_profiles, pv_scenarios, batt_scenarios, ("yearmin1day",))
             )
