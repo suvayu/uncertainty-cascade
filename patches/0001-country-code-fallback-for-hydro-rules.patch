@@ -1,0 +1,51 @@
+From 985751ce86caaa7b9c4131a9af9f93340d07e4b6 Mon Sep 17 00:00:00 2001
+From: Suvayu Ali <fatkasuvayu+linux@gmail.com>
+Date: Tue, 1 Jun 2021 02:15:40 +0200
+Subject: [PATCH 1/2] country code fallback for hydro rules
+
+---
+ src/hydro/inflow_m3.py | 21 ++++++++++++++++++++-
+ 1 file changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/src/hydro/inflow_m3.py b/src/hydro/inflow_m3.py
+index 8ae461a..ea78677 100644
+--- a/src/hydro/inflow_m3.py
++++ b/src/hydro/inflow_m3.py
+@@ -8,6 +8,23 @@ from shapely.geometry import Point
+ import pycountry
+ 
+ 
++def _eu_country_code_fix(eu_country_code):
++    """Converts EU country code to ISO 3166 alpha 3.
++
++    The European Union uses its own country codes, which often but not always match ISO 3166.
++    """
++    assert (
++        len(eu_country_code) == 2
++    ), "EU country codes are of length 2, yours is '{}'.".format(eu_country_code)
++    if eu_country_code.lower() == "el":
++        iso2 = "gr"
++    elif eu_country_code.lower() == "uk":
++        iso2 = "gb"
++    else:
++        iso2 = eu_country_code
++    return iso2
++
++
+ def determine_water_inflow(path_to_cutout, path_to_stations, path_to_basins, year, path_to_output):
+     path_to_cutout = Path(path_to_cutout)
+     plants = read_plants(path_to_stations)
+@@ -21,7 +38,9 @@ def determine_water_inflow(path_to_cutout, path_to_stations, path_to_basins, yea
+ 
+ def read_plants(path_to_stations):
+     plants = pd.read_csv(path_to_stations, index_col=0)
+-    plants["country_code"] = plants["country_code"].map(lambda iso2: pycountry.countries.lookup(iso2).alpha_3)
++    plants["country_code"] = plants["country_code"].map(
++        lambda iso2: pycountry.countries.lookup(_eu_country_code_fix(iso2)).alpha_3
++    )
+     plants = plants[plants["type"].isin(["HROR", "HDAM"])]
+     return gpd.GeoDataFrame(
+         plants,
+-- 
+2.31.1
+

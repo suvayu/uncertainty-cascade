@@ -1,0 +1,83 @@
+From cc95564a17f1da94dbb90bb1708b9d40068fbefb Mon Sep 17 00:00:00 2001
+From: Suvayu Ali <fatkasuvayu+linux@gmail.com>
+Date: Tue, 1 Jun 2021 02:16:15 +0200
+Subject: [PATCH 2/2] year: 2016 -> 2015
+
+- model year: for time series
+- timestamp in unit tests
+---
+ config/default.yaml                    | 2 +-
+ src/template/example-model.yaml        | 2 +-
+ tests/resources/continental/model.yaml | 2 +-
+ tests/resources/national/model.yaml    | 2 +-
+ tests/resources/regional/model.yaml    | 2 +-
+ 5 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/config/default.yaml b/config/default.yaml
+index 75ebfd2..cc759cc 100644
+--- a/config/default.yaml
++++ b/config/default.yaml
+@@ -11,7 +11,7 @@ capacity-factors:
+         offshore: 0.4223 # median of average 2016 factors for ~2800 points in Europe
+         ror: 0.536781 # median of average 2016 factors for 1889 hydro stations in Europe
+     trim-ninja-timeseries: True # trims renewables.ninja timeseries to the year in question
+-year: 2016
++year: 2015
+ crs: "EPSG:4326"
+ parameters:
+     maximum-installable-power-density: # this is not the yield, but the density of installed power
+diff --git a/src/template/example-model.yaml b/src/template/example-model.yaml
+index 46c1513..f515331 100644
+--- a/src/template/example-model.yaml
++++ b/src/template/example-model.yaml
+@@ -11,7 +11,7 @@ model:
+     name: 'Example model'
+     calliope_version: 0.6.5
+     timeseries_data_path: '.'
+-    subset_time: ['2016-01-01', '2016-01-01']
++    subset_time: ['2015-01-01', '2015-01-01']
+ run:
+     solver: gurobi
+     solver_io: python
+diff --git a/tests/resources/continental/model.yaml b/tests/resources/continental/model.yaml
+index 8e4b805..c08cf53 100644
+--- a/tests/resources/continental/model.yaml
++++ b/tests/resources/continental/model.yaml
+@@ -10,7 +10,7 @@ model:
+     name: 'Test model with continental spatial resolution'
+     calliope_version: 0.6.5
+     timeseries_data_path: '../../../build/model/continental'
+-    subset_time: ['2016-01-01', '2016-01-01']
++    subset_time: ['2015-01-01', '2015-01-01']
+ scenarios:
+     default: []
+     directional-pv: ["directional-rooftop-pv"]
+diff --git a/tests/resources/national/model.yaml b/tests/resources/national/model.yaml
+index 38da3f9..32ab78a 100644
+--- a/tests/resources/national/model.yaml
++++ b/tests/resources/national/model.yaml
+@@ -10,7 +10,7 @@ model:
+     name: 'Test model with national spatial resolution'
+     calliope_version: 0.6.5
+     timeseries_data_path: '../../../build/model/national'
+-    subset_time: ['2016-01-01', '2016-01-01']
++    subset_time: ['2015-01-01', '2015-01-01']
+ scenarios:
+     default: []
+     connected: ["connect"]
+diff --git a/tests/resources/regional/model.yaml b/tests/resources/regional/model.yaml
+index fdf94d3..121692e 100644
+--- a/tests/resources/regional/model.yaml
++++ b/tests/resources/regional/model.yaml
+@@ -10,7 +10,7 @@ model:
+     name: 'Test model with regional spatial resolution'
+     calliope_version: 0.6.5
+     timeseries_data_path: '../../../build/model/regional'
+-    subset_time: ['2016-01-01', '2016-01-01']
++    subset_time: ['2015-01-01', '2015-01-01']
+ scenarios:
+     default: []
+     connected: ["connect"]
+-- 
+2.31.1
+
