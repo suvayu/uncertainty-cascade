@@ -15,6 +15,7 @@ parser.add_argument(
     nargs="+",
     help="YAML Calliope config files defining locations and technologies",
 )
+parser.add_argument("--to-year", type=int, default=2015, help="Time series year")
 parser.add_argument(
     "--output", help="YAML Calliope config defining overrides and scenarios"
 )
@@ -23,5 +24,5 @@ parser.add_argument(
 if __name__ == "__main__":
     opts = parser.parse_args()
     config = merge_dicts([dwim_file(f) for f in opts.configs])
-    scenarios = get_scenarios(config, opts.demand, opts.output)
+    scenarios = get_scenarios(config, opts.demand, opts.output, opts.to_year)
     dwim_file(opts.output, scenarios)

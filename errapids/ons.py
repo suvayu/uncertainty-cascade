@@ -163,10 +163,23 @@ def vary_costs(
     )
 
 
-def get_time_spans() -> Dict:
+def get_time_spans(to_yr: int) -> Dict:
+    """Return a time span of 365 days, adjusting for leap years.
+
+    - non-leap years: 2015-01-01, 2015-12-31
+    - leap years: 2016-01-01, 2016-12-30
+
+    """
     return {
-        "janweek1": {"model": {"subset_time": ["2016-01-01", "2016-01-07"]}},
-        "yearmin1day": {"model": {"subset_time": ["2016-01-01", "2016-12-30"]}},
+        "janweek1": {"model": {"subset_time": [f"{to_yr}-01-01", f"{to_yr}-01-07"]}},
+        "yearmin1day": {
+            "model": {
+                "subset_time": [
+                    f"{to_yr}-01-01",
+                    f"{to_yr}-12-31" if to_yr % 4 else f"{to_yr}-12-30",
+                ]
+            }
+        },
         # NOTE: align time interval with capacity factor timeseries
     }
 
@@ -186,7 +199,7 @@ def get_scenarios(config: Dict, demand_profile_dir: str, output: str) -> Dict:
     batt_scenarios = vary_costs(
         "battery", config, ["battery"], [], ["energy_cap", "storage_cap"], [1, 0.7, 0.5]
     )
-    time_spans = get_time_spans()
+    time_spans = get_time_spans(to_yr)
     scenarios = {
         "scenarios": {
             f"scenario{i+1:02d}": list(v)

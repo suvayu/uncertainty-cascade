@@ -1,6 +1,6 @@
 """Utilites to preprocess CSV files from DESTinEE for Calliope"""
 
-from itertools import chain
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Tuple, Union
 
@@ -48,7 +48,7 @@ country_map = alias_dict(
 )
 
 
-def read_csv_to_df(fpath: _path_t) -> pd.DataFrame:
+def read_csv_to_df(fpath: _path_t, to_yr: int, from_yr: int = 2050) -> pd.DataFrame:
     df = pd.read_csv(
         fpath,
         header=0,
@@ -59,18 +59,16 @@ def read_csv_to_df(fpath: _path_t) -> pd.DataFrame:
     )
     df.columns = df.columns.map(country_map).astype("category")
     # NOTE: reindex to match capacity factor timestep
-    shift = len(
-        pd.date_range(start="2016-01-01", end="2050-01-01", freq="D", closed="left")
-    )
-    df.index = df.index.shift(-shift, freq="D")
+    shift = datetime(from_yr, 1, 1) - datetime(to_yr, 1, 1)
+    df.index = df.index.shift(-shift.days, freq="D")
     # NOTE: demand is -ve in calliope, and default units are 1GW in destinee as
     # opposed to 100GW in euro calliope
     return df * -1e-2
 
 
-def destinee2calliope_csv(inpath: _path_t, outpath: _path_t):
+def destinee2calliope_csv(inpath: _path_t, outpath: _path_t, to_yr: int):
     # NOTE: match datetime format with capacity factor timeseries
-    df = read_csv_to_df(inpath)
+    df = read_csv_to_df(inpath, to_yr=to_yr)
     df.to_csv(outpath, date_format="%Y-%m-%d %H:%M")  # , float_format="{0:.5f}".format)
 
 
