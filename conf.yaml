@@ -1,0 +1,15 @@
+metadata:
+  name: uncertainty-cascade-destinee-calliope-summary
+  title: Uncertainty cascade summary - DESTinEE & Calliope (Europe)
+  description: >-
+    Summary metrics after running through 2050 demand profiles from
+    DESTinEE through Euro Calliope.  The metrics that are derived from
+    a time series, are aggregated by using the mean.
+  keywords:
+    - Europe
+    - DESTinEE
+    - Calliope
+    - uncertainty
+    - 2050 demand profile
+    - 2015 weather data
+  licenses: CC-BY-4.0
