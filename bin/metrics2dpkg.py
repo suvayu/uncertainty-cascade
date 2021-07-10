@@ -10,7 +10,7 @@ from friendly_data.cli import _metadata
 from friendly_data.converters import from_df
 from friendly_data.dpkg import create_pkg, write_pkg, _resource
 
-from errapids.metrics import ScenarioGroups, fraction_by_level
+from errapids.metrics import metric_as_dfs
 
 parser = ArgumentParser(description=__doc__)
 parser.add_argument("datadir", help="directory with NetCDF files from Calliope run")
@@ -23,11 +23,7 @@ parser.add_argument(
 if __name__ == "__main__":
     opts = parser.parse_args()
 
-    metrics = ScenarioGroups.from_dir(opts.datadir, "out_scenario*.nc")
-    dfs = [metrics[name].to_frame() for name in metrics.varnames]
-    prod_share = fraction_by_level(metrics["carrier_prod"], "technology")
-    prod_share.name = "carrier_prod_share"
-    dfs.append(prod_share.to_frame())
+    dfs = metric_as_dfs(opts.datadir, "out_scenario*.nc")
     resources = [
         from_df(df, basepath=opts.outdir, alias={"energy_cap": "nameplate_capacity"})
         for df in dfs

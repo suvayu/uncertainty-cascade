@@ -1,6 +1,6 @@
 from itertools import chain
 from pathlib import Path
-from typing import Iterable, Tuple, Union
+from typing import Iterable, List, Tuple, Union
 
 from glom import glom, Iter
 import pandas as pd
@@ -190,3 +190,13 @@ def fraction_by_level(arr: pd.Series, lvl: Union[int, str]) -> pd.Series:
     denominator = arr.groupby(level=list(range(_lvl))).sum()
     numerator, denominator = numerator.align(denominator, method="ffill")
     return numerator / denominator
+
+
+def metric_as_dfs(datadir: _path_t, glob: str, **kwargs) -> List[pd.DataFrame]:
+    metrics = ScenarioGroups.from_dir(datadir, glob, **kwargs)
+    alias = {"energy_cap": "nameplate_capacity"}
+    dfs = [metrics[name].to_frame().rename(columns=alias) for name in metrics.varnames]
+    prod_share = fraction_by_level(metrics["carrier_prod"], "technology")
+    prod_share.name = "carrier_prod_share"
+    dfs.append(prod_share.to_frame().rename(columns=alias))
+    return dfs
