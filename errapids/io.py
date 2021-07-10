@@ -68,25 +68,3 @@ def destinee2calliope_csv(inpath: _path_t, outpath: _path_t, to_yr: int):
     # NOTE: match datetime format with capacity factor timeseries
     df = read_csv_to_df(inpath, to_yr=to_yr)
     df.to_csv(outpath, date_format="%Y-%m-%d %H:%M")  # , float_format="{0:.5f}".format)
-
-
-_flevel_aliases = {
-    "high": ["high", "hi"],
-    "mid": ["mid", "medium"],
-    "low": ["low", "lo"],
-}
-
-
-def decode_fname(fname: str) -> Tuple[str, str]:
-    tokens = fname.lower().split("_")
-
-    def remap(token: str) -> str:
-        key = [k for k, v in _flevel_aliases.items() if token in v]
-        assert key
-        return key[0]
-
-    # building heating, charging profile
-    heating = remap(tokens[0])
-    charging = remap(tokens[2])
-    # return f"{heating}_{charging}"
-    return heating, charging

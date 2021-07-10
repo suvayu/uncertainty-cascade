@@ -6,8 +6,29 @@ from glom import glom, Iter
 import pandas as pd
 import xarray as xr
 
-from errapids.io import _path_t, decode_fname
 from errapids.ons import pv_batt_lvls
+
+
+_flevel_aliases = {
+    "high": ["high", "hi"],
+    "mid": ["mid", "medium"],
+    "low": ["low", "lo"],
+}
+
+
+def decode_fname(fname: str) -> Tuple[str, str]:
+    tokens = fname.lower().split("_")
+
+    def remap(token: str) -> str:
+        key = [k for k, v in _flevel_aliases.items() if token in v]
+        assert key
+        return key[0]
+
+    # building heating, charging profile
+    heating = remap(tokens[0])
+    charging = remap(tokens[2])
+    # return f"{heating}_{charging}"
+    return heating, charging
 
 
 class Metrics:
