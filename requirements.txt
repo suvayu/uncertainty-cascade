@@ -1,5 +1,6 @@
 friendly_data
 glom
+holoviews
 pandas
 pycountry
 xarray
