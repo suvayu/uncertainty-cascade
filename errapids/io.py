@@ -33,13 +33,16 @@ class alias_dict(dict):
 
 country_map = alias_dict(
     ((c.name, c.alpha_3) for c in countries),
-    # NOTE: alias non-standard country names used by DESTINEE
+    # NOTE: alias non-standard country names used by DESTINEE & WB
     aliases={
         "UK": "United Kingdom",
         "Moldova": "Moldova, Republic of",
         "Macedonia": "North Macedonia",
         "Bosnia Herz.": "Bosnia and Herzegovina",
+        "Bosnia Herzegovina": "Bosnia and Herzegovina",
         "Czech Rep.": "Czechia",
+        "Czech Republic": "Czechia",
+        "Slovak Republic": "Slovakia",
     },
     # fallthrough non-country column
     noops=["timestep"],
