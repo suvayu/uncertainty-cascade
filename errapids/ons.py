@@ -146,6 +146,8 @@ def vary_costs(
     )
     glom(ref, _match)  # validate
     eof_techs = len(techs)
+    # FIXME: scenario name -> {basename}{int(i*100):03d}, can't fix without
+    # rerunning; also update metrics.prettify_costs accordingly
     return glom(
         {},
         tuple(

@@ -6,6 +6,7 @@ from glom import glom, Iter
 import pandas as pd
 import xarray as xr
 
+from errapids.io import _path_t
 from errapids.ons import pv_batt_lvls
 
 
@@ -31,12 +32,20 @@ def decode_fname(fname: str) -> Tuple[str, str]:
     return heating, charging
 
 
+def prettify_costs(name: str, pretty: bool) -> Union[str, int]:
+    factor = pv_batt_lvls[int(name[-1]) - 1]
+    if pretty:
+        return name[:-1] + "{:03d}".format(int(factor * 100))
+    else:
+        return int(factor * 100)
+
+
 class Metrics:
     """Parses the Calliope model result and provides summary metrics
 
     A Calliope model result encodes the factor/categorical variables for some
     of the metrics by concatenating them: location, technology, [carrier].
-    Others combination are left as is: e.g. carrier, cost, technology.  This
+    Other combinations are left as is: e.g. carrier, cost, technology.  This
     class parses the concatenated factor/categorical variables, as well as
     resolves their order into one definite order: cost, location, technology,
     carrier.
@@ -49,7 +58,7 @@ class Metrics:
 
     >>> metrics = Metrics.from_netcdf("path/to/model_result.nc")
     >>> metrics["energy_cap"]
-    # a dataframe
+    # a pandas.Series
 
     """
 
@@ -70,6 +79,7 @@ class Metrics:
         if "costs" in darr.dims:  # costs: redundant, usually only monetary
             darr = darr.sel(costs="monetary")
         arr = darr.to_pandas()  # series or dataframe (when timeseries)
+        # when timeseries, "wide" format, i.e. timesteps as columns
 
         if "carriers" in darr.dims and len(darr.dims) > 1:  # when not concatenated
             arr = arr.stack()  # dataframe -> series
@@ -118,30 +128,30 @@ class ScenarioGroups:
     idxcols = "heating,EV,PV,battery".split(",")
 
     @classmethod
-    def from_dir(cls, dpath: _path_t, glob: str) -> "ScenarioGroups":
-        return cls.from_netcdfs(Path(dpath).glob(glob))
+    def from_dir(cls, dpath: _path_t, glob: str, **kwargs) -> "ScenarioGroups":
+        return cls.from_netcdfs(Path(dpath).glob(glob), **kwargs)
 
     @classmethod
-    def from_netcdfs(cls, fpaths: Iterable[_path_t]) -> "ScenarioGroups":
-        return cls(map(xr.open_dataset, fpaths))
+    def from_netcdfs(cls, fpaths: Iterable[_path_t], **kwargs) -> "ScenarioGroups":
+        return cls(map(xr.open_dataset, fpaths), **kwargs)
 
     @classmethod
-    def __prettify__(cls, name: str) -> str:
-        factor = pv_batt_lvls[int(name[-1]) - 1]
-        return name[:-1] + "{:03d}".format(int(factor * 100))
-
-    @classmethod
-    def __unpack_overrides__(cls, overrides: str) -> Tuple[str, ...]:
+    def __unpack_overrides__(cls, overrides: str, pretty: bool) -> Tuple:
         lvls = overrides.split(";")[:-1]
         # override order: 1) building heating, EV charging, 2) PV, 3) battery
         heating, charging = decode_fname(lvls[0])
         pv, battery = lvls[1:]
-        return heating, charging, cls.__prettify__(pv), cls.__prettify__(battery)
+        return (
+            heating,
+            charging,
+            prettify_costs(pv, pretty),
+            prettify_costs(battery, pretty),
+        )
 
-    def __init__(self, scenarios: Iterable[xr.Dataset]):
+    def __init__(self, scenarios: Iterable[xr.Dataset], pretty: bool = True):
         self._scenarios = {
             dst.scenario: (
-                self.__unpack_overrides__(dst.applied_overrides),
+                self.__unpack_overrides__(dst.applied_overrides, pretty),
                 Metrics(dst),
             )
             for dst in scenarios
