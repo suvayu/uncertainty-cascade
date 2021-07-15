@@ -3,4 +3,5 @@ glom
 holoviews
 pandas
 pycountry
+tqdm
 xarray

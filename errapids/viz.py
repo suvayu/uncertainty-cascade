@@ -1,11 +1,19 @@
-from typing import Dict, Sequence, Tuple, TypeVar, Union
+from itertools import cycle, islice
+from logging import getLogger
+from typing import Dict, List, Sequence, Tuple, TypeVar, Union
+from holoviews.core.spaces import HoloMap
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 import holoviews as hv
+from holoviews import opts
 
 from errapids.metrics import metric_as_dfs
+
+logger = getLogger(__name__)
+
 
 # region groups
 rgroups = {
@@ -178,7 +186,11 @@ def scenario_deltas(df: pd.DataFrame, istransmission: bool = False) -> pd.DataFr
         else:  # series
             _df = pd.DataFrame([_df], index=pd.Index([scenario], name="scenario"))
         dfs.append(_df)
-    return pd.concat(dfs, axis=0)
+    df = pd.concat(dfs, axis=0)
+    if isinstance(df.index, pd.MultiIndex):
+        return df.reindex(index=list(baselines), level="scenario")
+    else:
+        return df.reindex(index=list(baselines))
 
 
 def elements(df: pd.DataFrame, region: str, groupby: str) -> Dict[str, Tuple]:
@@ -248,6 +260,118 @@ def elements(df: pd.DataFrame, region: str, groupby: str) -> Dict[str, Tuple]:
     return elements
 
 
+def facets(df: pd.DataFrame, region: str, stack: str) -> Tuple:
+    """Create a bar chart, and a faceted set of uncertainties
+
+    The number of countries are limited to the ``region`` defined in `rgroups`.
+    The index level (or dimension) ``stack`` is "stacked" in the summary plot,
+    and summed over in the undertainty plots.  The unceratainty plots are
+    faceted over the "remaining" index level (or dimension) - "region" or
+    "technology".
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Dataframe
+
+    region : str
+        Region group, as defined in `rgroups`
+
+    stack : str
+        Index level (or dimension) to stack/sum over
+
+    Returns
+    -------
+    Tuple[holoviews.Bars, holoviews.HoloMap, holoviews.HoloMap]
+        The plot elements, the holomaps contain faceted uncertainty spreads,
+        and the corresponding tables
+
+    """
+    name = df.columns[0]
+
+    if not isinstance(df.index, pd.MultiIndex):
+        assert df.index.name == "scenario"
+        rmax = 1.2 * df[[name, "errhi"]].sum(axis=1).max()
+        bars = hv.Bars(df, vdims=[name], kdims=["scenario"]).opts(
+            tools=["hover"], ylim=(0, rmax)
+        )
+        errs = hv.Spread(df, vdims=[name, "errlo", "errhi"], kdims=["scenario"]).opts(
+            fill_alpha=0.7
+        ) * hv.HLine(df.iloc[0, 0])
+        return bars, errs, hv.Table(df.reset_index())
+
+    if stack and stack not in df.index.names:
+        raise ValueError(f"{name}: {stack=} not present")
+
+    if region and "region" in df.index.names:
+        grp = rgroups[region]  # noqa, choose region, implicitly used in df.query(..)
+        df = df.query("region in @grp")
+    elif region:
+        logger.warning(f"{name}: no region level in index, {region=} ignored")
+    else:
+        logger.info(f"{name}: no region level in index")
+
+    grpd = df.groupby(df.index.names.difference([stack])).agg(
+        {name: np.sum, "errlo": qsum, "errhi": qsum}
+    )
+    if isinstance(grpd.index, pd.MultiIndex):
+        grpd = grpd.reindex(index=list(baselines), level="scenario")
+    else:
+        grpd = grpd.reindex(index=list(baselines))
+
+    space = 1.7 if stack == "technology" else 1.2
+    rmax = space * grpd[[name, "errhi"]].sum(axis=1).max()
+
+    # maintain original order
+    kdims = df.index.names.difference(["scenario"])
+    if stack:
+        stackidx = kdims.index(stack)
+        kdims = list(islice(cycle(kdims), stackidx + 1, stackidx + 1 + len(kdims)))
+    bars = hv.Bars(df.query("scenario == 'all'"), vdims=[name], kdims=kdims).opts(
+        stacked=bool(stack), tools=["hover"], ylim=(0, rmax)
+    )
+
+    faceted_lvl = grpd.index.names[0]
+    if isinstance(grpd.index, pd.MultiIndex):
+        lvl_vals = grpd.index.levels[grpd.index.names.index(faceted_lvl)]
+    else:
+        lvl_vals = grpd.index
+    errs = HoloMap(
+        {
+            val: (
+                hv.Spread(
+                    grpd.loc[val, :], vdims=list(grpd.columns), kdims=["scenario"]
+                ).opts(fill_alpha=0.7, ylim=(0, rmax))
+                * hv.HLine(grpd.loc[val, name].iloc[0])
+            )
+            for val in lvl_vals
+        },
+        kdims=[faceted_lvl],
+    )
+    tbl = HoloMap(
+        {
+            val: hv.Table(df.query(f"{faceted_lvl} == @val").reset_index())
+            for val in lvl_vals
+        },
+        kdims=[faceted_lvl],
+    )
+    return bars, errs, tbl
+
+
+def layout(bars, errs, tbl, height):
+    layout = (
+        hv.Layout(bars + errs + tbl)
+        .opts(toolbar="right", height=height)
+        .opts(
+            opts.Bars(width=2 * height),
+            opts.Spread(width=height),
+            opts.Table(width=2 * height),
+        )
+        .cols(2)
+    )
+    return layout
+
+
 class plotmanager:
     """Manage and render the plots
 
@@ -268,10 +392,12 @@ class plotmanager:
         return list(self._dfs)
 
     @property
-    def regions(self):
+    def regions(self) -> List[str]:
         return list(rgroups)
 
-    def plot(self, metric: str, region: str, groupby: str) -> hv.Layout:
+    def plot(
+        self, metric: str, region: str, stack: str, height: int = 400
+    ) -> hv.Layout:
         """Render plot
 
         Parameters
@@ -282,8 +408,11 @@ class plotmanager:
         region : str
             Region subset to include in plot
 
-        groupby : str
-            Index level to facet
+        stack : str
+            Index level to stack
+
+        height : int (default: 400)
+            Height of individual plots, everything else is scaled accordingly
 
         Returns
         -------
@@ -291,12 +420,8 @@ class plotmanager:
             A 2-column ``hvplot.Layout`` with the different facets of the plot
 
         """
-        plottables = elements(self._dfs[metric], region, groupby)
-        figures = []
-        for facet, (bar, err, *_) in plottables.items():
-            fig = (bar * err).opts(title=facet, width=800, height=600)
-            figures.append(fig)
-        return hv.Layout(figures).cols(2)
+        bars, errs, tbl = facets(self._dfs[metric], region, stack)
+        return layout(bars, errs, tbl, height)
 
     def write(self, plotdir: str):
         """Write all plots to a directory
@@ -307,22 +432,15 @@ class plotmanager:
             Plot directory
 
         """
-        for metric in self.metrics:
+        pbar = tqdm(self.metrics)
+        for metric in pbar:
+            pbar.set_description(f"{metric}")
             if "total" in metric or "systemwide" in metric:
-                continue
-            for region in rgroups:
-                for grouping in ("region", "technology"):
-                    plots = self.plot(metric, region, grouping)
-                    hv.save(plots, f"{plotdir}/{metric}_{region}_{grouping}.html")
-
-        for metric in self.metrics:
-            if "systemwide" in metric:
-                grouping = "technology"
-            elif "total" in metric:
-                grouping = ""
+                hv.save(self.plot(metric, "", ""), f"{plotdir}/{metric}.html")
             else:
-                continue
-            plots = self.plot(metric, "", grouping)
-            hv.save(
-                plots, f"{plotdir}/{metric}{'_' + grouping if grouping else ''}.html"
-            )
+                pbar2 = tqdm(rgroups)
+                for region in pbar2:
+                    pbar2.set_description(f"{region=}")
+                    for stack in ("region", "technology"):
+                        plots = self.plot(metric, region, stack)
+                        hv.save(plots, f"{plotdir}/{metric}_{region}_{stack}.html")
