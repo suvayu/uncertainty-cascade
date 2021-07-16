@@ -1,0 +1,262 @@
+* Plot description
+
+The plots are grouped in two ways, by country and by technology.  To
+keep the plots manageable, the countries have been grouped as shown
+in the table below.  Transmission is not included for the moment.
+
+| nordic | baltic | poland | west | med | isles | balkan | landlocked |
+|--------+--------+--------+------+-----+-------+--------+------------|
+| DNK    | EST    | POL    | DEU  | ESP | GBR   | MKD    | SVK        |
+| FIN    | LTU    |        | FRA  | ITA | IRL   | ROU    | HUN        |
+| NOR    | LVA    |        | NLD  | GRC |       | SRB    | CZE        |
+| SWE    |        |        | LUX  | PRT |       | SVN    |            |
+|        |        |        |      |     |       | HRV    |            |
+
+To compare the variation between different scenarios, they are treated
+in groups: building heating, EV charging, PV cost, and battery cost.
+For each we decide on a baseline as shown in the table below.  When
+one scenario is being varied, the others are pinned to the
+corresponding baseline.  Then the (asymmetric) uncertainty is
+calculated as deviation from the baseline for that scenario.
+
+The scenarios are further grouped into three categories: demand side
+uncertainty, and cost uncertainty, and all.  To estimate the
+uncertainty of one scenario group, the scenarios in the other group
+are pinned to their baselines; for all nothing is pinned.
+
+Scenario baselines:
+| heating | EV  |  PV | battery | demand  | cost    | all  |
+|---------+-----+-----+---------+---------+---------+------|
+| mid     | low | 100 |     100 | PV      | heating | none |
+|         |     |     |         | battery | EV      |      |
+
+* Notes
+
+The plot files are named as: {metric}_{region}_{grouping}.html, where
+grouping is either "region" or "technology".  The bars in the plots
+are is the baseline for all, i.e. all fixed, and the uncertainty is
+shown by the error bars.  I don't think this is ideal, as you cannot
+see the different splits (by country or technology).  But I chose this
+to make it easier to compare.
+
+* To do
+
+- compare the time series as mentioned for specific high demand time
+  periods
+- include transmission/transport
+
+* Plots
+- file:capacity_factor_balkan_region.html
+- file:capacity_factor_balkan_technology.html
+- file:capacity_factor_baltic_region.html
+- file:capacity_factor_baltic_technology.html
+- file:capacity_factor_isles_region.html
+- file:capacity_factor_isles_technology.html
+- file:capacity_factor_landlocked_region.html
+- file:capacity_factor_landlocked_technology.html
+- file:capacity_factor_med_region.html
+- file:capacity_factor_med_technology.html
+- file:capacity_factor_nordic_region.html
+- file:capacity_factor_nordic_technology.html
+- file:capacity_factor_poland_region.html
+- file:capacity_factor_poland_technology.html
+- file:capacity_factor_west_region.html
+- file:capacity_factor_west_technology.html
+- file:carrier_con_balkan_region.html
+- file:carrier_con_balkan_technology.html
+- file:carrier_con_baltic_region.html
+- file:carrier_con_baltic_technology.html
+- file:carrier_con_isles_region.html
+- file:carrier_con_isles_technology.html
+- file:carrier_con_landlocked_region.html
+- file:carrier_con_landlocked_technology.html
+- file:carrier_con_med_region.html
+- file:carrier_con_med_technology.html
+- file:carrier_con_nordic_region.html
+- file:carrier_con_nordic_technology.html
+- file:carrier_con_poland_region.html
+- file:carrier_con_poland_technology.html
+- file:carrier_con_west_region.html
+- file:carrier_con_west_technology.html
+- file:carrier_prod_balkan_region.html
+- file:carrier_prod_balkan_technology.html
+- file:carrier_prod_baltic_region.html
+- file:carrier_prod_baltic_technology.html
+- file:carrier_prod_isles_region.html
+- file:carrier_prod_isles_technology.html
+- file:carrier_prod_landlocked_region.html
+- file:carrier_prod_landlocked_technology.html
+- file:carrier_prod_med_region.html
+- file:carrier_prod_med_technology.html
+- file:carrier_prod_nordic_region.html
+- file:carrier_prod_nordic_technology.html
+- file:carrier_prod_poland_region.html
+- file:carrier_prod_poland_technology.html
+- file:carrier_prod_share_balkan_region.html
+- file:carrier_prod_share_balkan_technology.html
+- file:carrier_prod_share_baltic_region.html
+- file:carrier_prod_share_baltic_technology.html
+- file:carrier_prod_share_isles_region.html
+- file:carrier_prod_share_isles_technology.html
+- file:carrier_prod_share_landlocked_region.html
+- file:carrier_prod_share_landlocked_technology.html
+- file:carrier_prod_share_med_region.html
+- file:carrier_prod_share_med_technology.html
+- file:carrier_prod_share_nordic_region.html
+- file:carrier_prod_share_nordic_technology.html
+- file:carrier_prod_share_poland_region.html
+- file:carrier_prod_share_poland_technology.html
+- file:carrier_prod_share_west_region.html
+- file:carrier_prod_share_west_technology.html
+- file:carrier_prod_west_region.html
+- file:carrier_prod_west_technology.html
+- file:cost_balkan_region.html
+- file:cost_balkan_technology.html
+- file:cost_baltic_region.html
+- file:cost_baltic_technology.html
+- file:cost_investment_balkan_region.html
+- file:cost_investment_balkan_technology.html
+- file:cost_investment_baltic_region.html
+- file:cost_investment_baltic_technology.html
+- file:cost_investment_isles_region.html
+- file:cost_investment_isles_technology.html
+- file:cost_investment_landlocked_region.html
+- file:cost_investment_landlocked_technology.html
+- file:cost_investment_med_region.html
+- file:cost_investment_med_technology.html
+- file:cost_investment_nordic_region.html
+- file:cost_investment_nordic_technology.html
+- file:cost_investment_poland_region.html
+- file:cost_investment_poland_technology.html
+- file:cost_investment_west_region.html
+- file:cost_investment_west_technology.html
+- file:cost_isles_region.html
+- file:cost_isles_technology.html
+- file:cost_landlocked_region.html
+- file:cost_landlocked_technology.html
+- file:cost_med_region.html
+- file:cost_med_technology.html
+- file:cost_nordic_region.html
+- file:cost_nordic_technology.html
+- file:cost_poland_region.html
+- file:cost_poland_technology.html
+- file:cost_var_balkan_region.html
+- file:cost_var_balkan_technology.html
+- file:cost_var_baltic_region.html
+- file:cost_var_baltic_technology.html
+- file:cost_var_isles_region.html
+- file:cost_var_isles_technology.html
+- file:cost_var_landlocked_region.html
+- file:cost_var_landlocked_technology.html
+- file:cost_var_med_region.html
+- file:cost_var_med_technology.html
+- file:cost_var_nordic_region.html
+- file:cost_var_nordic_technology.html
+- file:cost_var_poland_region.html
+- file:cost_var_poland_technology.html
+- file:cost_var_west_region.html
+- file:cost_var_west_technology.html
+- file:cost_west_region.html
+- file:cost_west_technology.html
+- file:nameplate_capacity_balkan_region.html
+- file:nameplate_capacity_balkan_technology.html
+- file:nameplate_capacity_baltic_region.html
+- file:nameplate_capacity_baltic_technology.html
+- file:nameplate_capacity_isles_region.html
+- file:nameplate_capacity_isles_technology.html
+- file:nameplate_capacity_landlocked_region.html
+- file:nameplate_capacity_landlocked_technology.html
+- file:nameplate_capacity_med_region.html
+- file:nameplate_capacity_med_technology.html
+- file:nameplate_capacity_nordic_region.html
+- file:nameplate_capacity_nordic_technology.html
+- file:nameplate_capacity_poland_region.html
+- file:nameplate_capacity_poland_technology.html
+- file:nameplate_capacity_west_region.html
+- file:nameplate_capacity_west_technology.html
+- file:resource_area_balkan_region.html
+- file:resource_area_balkan_technology.html
+- file:resource_area_baltic_region.html
+- file:resource_area_baltic_technology.html
+- file:resource_area_isles_region.html
+- file:resource_area_isles_technology.html
+- file:resource_area_landlocked_region.html
+- file:resource_area_landlocked_technology.html
+- file:resource_area_med_region.html
+- file:resource_area_med_technology.html
+- file:resource_area_nordic_region.html
+- file:resource_area_nordic_technology.html
+- file:resource_area_poland_region.html
+- file:resource_area_poland_technology.html
+- file:resource_area_west_region.html
+- file:resource_area_west_technology.html
+- file:resource_cap_balkan_region.html
+- file:resource_cap_balkan_technology.html
+- file:resource_cap_baltic_region.html
+- file:resource_cap_baltic_technology.html
+- file:resource_cap_isles_region.html
+- file:resource_cap_isles_technology.html
+- file:resource_cap_landlocked_region.html
+- file:resource_cap_landlocked_technology.html
+- file:resource_cap_med_region.html
+- file:resource_cap_med_technology.html
+- file:resource_cap_nordic_region.html
+- file:resource_cap_nordic_technology.html
+- file:resource_cap_poland_region.html
+- file:resource_cap_poland_technology.html
+- file:resource_cap_west_region.html
+- file:resource_cap_west_technology.html
+- file:resource_con_balkan_region.html
+- file:resource_con_balkan_technology.html
+- file:resource_con_baltic_region.html
+- file:resource_con_baltic_technology.html
+- file:resource_con_isles_region.html
+- file:resource_con_isles_technology.html
+- file:resource_con_landlocked_region.html
+- file:resource_con_landlocked_technology.html
+- file:resource_con_med_region.html
+- file:resource_con_med_technology.html
+- file:resource_con_nordic_region.html
+- file:resource_con_nordic_technology.html
+- file:resource_con_poland_region.html
+- file:resource_con_poland_technology.html
+- file:resource_con_west_region.html
+- file:resource_con_west_technology.html
+- file:storage_balkan_region.html
+- file:storage_balkan_technology.html
+- file:storage_baltic_region.html
+- file:storage_baltic_technology.html
+- file:storage_cap_balkan_region.html
+- file:storage_cap_balkan_technology.html
+- file:storage_cap_baltic_region.html
+- file:storage_cap_baltic_technology.html
+- file:storage_cap_isles_region.html
+- file:storage_cap_isles_technology.html
+- file:storage_cap_landlocked_region.html
+- file:storage_cap_landlocked_technology.html
+- file:storage_cap_med_region.html
+- file:storage_cap_med_technology.html
+- file:storage_cap_nordic_region.html
+- file:storage_cap_nordic_technology.html
+- file:storage_cap_poland_region.html
+- file:storage_cap_poland_technology.html
+- file:storage_cap_west_region.html
+- file:storage_cap_west_technology.html
+- file:storage_isles_region.html
+- file:storage_isles_technology.html
+- file:storage_landlocked_region.html
+- file:storage_landlocked_technology.html
+- file:storage_med_region.html
+- file:storage_med_technology.html
+- file:storage_nordic_region.html
+- file:storage_nordic_technology.html
+- file:storage_poland_region.html
+- file:storage_poland_technology.html
+- file:storage_west_region.html
+- file:storage_west_technology.html
+- file:systemwide_capacity_factor.html
+- file:systemwide_capacity_factor_technology.html
+- file:systemwide_levelised_cost.html
+- file:systemwide_levelised_cost_technology.html
+- file:total_levelised_cost.html
+
