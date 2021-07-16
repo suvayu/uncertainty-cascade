@@ -255,8 +255,6 @@ to make it easier to compare.
 - file:storage_west_region.html
 - file:storage_west_technology.html
 - file:systemwide_capacity_factor.html
-- file:systemwide_capacity_factor_technology.html
 - file:systemwide_levelised_cost.html
-- file:systemwide_levelised_cost_technology.html
 - file:total_levelised_cost.html
 
