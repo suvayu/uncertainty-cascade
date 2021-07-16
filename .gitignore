@@ -1,0 +1,43 @@
+*~
+\#*\#
+.vscode
+
+# byte-compiled files
+__pycache__
+
+# build output
+build
+[_.]build
+*.egg-info
+
+# typical cache directories
+.*[cC]ache*
+
+# cache/dump
+*.json
+*.yaml
+*.log
+*.txt
+
+# reports
+*.html
+*.js
+*.css
+
+.coverage
+.hypothesis
+
+# binary
+*.png
+*.pdf
+
+# archives/compressed files
+*.tar
+*.zip
+*.gz
+*.bz
+*.xz
+
+# scratch directories
+dsts
+tmp
