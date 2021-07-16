@@ -32,12 +32,12 @@ Scenario baselines:
 
 * Notes
 
-The plot files are named as: {metric}_{region}_{grouping}.html, where
-grouping is either "region" or "technology".  The bars in the plots
-are is the baseline for all, i.e. all fixed, and the uncertainty is
-shown by the error bars.  I don't think this is ideal, as you cannot
-see the different splits (by country or technology).  But I chose this
-to make it easier to compare.
+The plot files are named as: ~{metric}_{region}_{grouping}.html~,
+where grouping is either "region" or "technology".  The bars in the
+plots are is the baseline for all, i.e. all fixed, and the uncertainty
+is shown by the error bars.  I don't think this is ideal, as you
+cannot see the different splits (by country or technology).  But I
+chose this to make it easier to compare.
 
 * To do
 
