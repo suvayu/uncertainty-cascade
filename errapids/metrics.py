@@ -118,12 +118,20 @@ class Metrics:
 
     def __idx__(self, _idx: pd.Index) -> Union[pd.Index, pd.MultiIndex]:
         if isinstance(_idx, pd.MultiIndex):  # carrier, technology
-            if _idx.names.index("carriers") < _idx.names.index("techs"):
-                _idx = _idx.swaplevel()
+            try:
+                if _idx.names.index("carriers") < _idx.names.index("techs"):
+                    _idx = _idx.swaplevel()
+            except ValueError:
+                # FIXME: some kind of caching is happening on repeat calls
+                if _idx.names.index("carrier") < _idx.names.index("techs"):
+                    _idx = _idx.swaplevel()
             _idx.names = ["technology", "carrier"]
             return _idx
         elif _idx.name == "carriers":  # carrier
             _idx.name = "carrier"
+            return _idx
+        elif _idx.name == "carrier":
+            # FIXME: some kind of caching is happening on repeat calls
             return _idx
 
         # parse concatenated location, technology, [carrier] values
