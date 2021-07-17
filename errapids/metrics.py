@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Iterable, List, Tuple, Union
 
 from glom import glom, Iter
+import numpy as np
 import pandas as pd
 import xarray as xr
 
@@ -81,13 +82,20 @@ class Metrics:
         """Read the saved model result from a NetCDF file"""
         return cls(xr.open_dataset(fpath))
 
+    def is_tseries(self, metric: str) -> bool:
+        return "timesteps" in getattr(self._dst, metric).coords
+
     def __init__(self, dst: xr.Dataset):
         self._dst = dst.filter_by_attrs(is_result=1)
+        self.time_varying = [v for v in self._dst.data_vars if self.is_tseries(v)]
 
     def __repr__(self) -> str:
         return repr(self._dst)
 
     def __getitem__(self, metric: str) -> pd.Series:
+        return self.get(metric, summarise=True)
+
+    def get(self, metric: str, summarise: bool) -> Union[pd.Series, pd.DataFrame]:
         """Access a metric from the model result"""
         darr = self._dst[metric]
         if "costs" in darr.dims:  # costs: redundant, usually only monetary
@@ -98,9 +106,10 @@ class Metrics:
         if "carriers" in darr.dims and len(darr.dims) > 1:  # when not concatenated
             arr = arr.stack()  # dataframe -> series
 
-        if arr.ndim == 2:  # timesteps: aggregated
-            arr = arr.mean(axis=1)  # dataframe -> series
-        assert arr.ndim == 1
+        if summarise:
+            if arr.ndim == 2:  # timesteps: aggregated
+                arr = arr.mean(axis=1)  # dataframe -> series
+            assert arr.ndim == 1
 
         # factors of interest: location, technology, [carrier]
         arr.index = self.__idx__(arr.index)
@@ -173,6 +182,8 @@ class ScenarioGroups:
         self.varnames = glom(
             self._scenarios.values(), (Iter("1._dst.data_vars").first(), list)
         )
+        dst = glom(self._scenarios.values(), Iter("1").first())
+        self.varnames_ts = [var for var in self.varnames if dst.is_tseries(var)]
 
     def __repr__(self) -> str:
         return "\n---\n".join(
@@ -180,11 +191,16 @@ class ScenarioGroups:
         )
 
     def __getitem__(self, metric: str) -> pd.Series:
+        if metric not in self.varnames:
+            raise KeyError(f"{metric}: unknown metric")
+        return self.get(metric, summarise=True)
+
+    def get(self, metric: str, summarise: bool) -> Union[pd.Series, pd.DataFrame]:
         df = pd.concat(
             [
-                metrics[metric]
-                .to_frame()
-                .assign(**{col: lvl for col, lvl in zip(self.idxcols, lvls)})
+                ensure_frame(metrics.get(metric, summarise)).assign(
+                    **{col: lvl for col, lvl in zip(self.idxcols, lvls)}
+                )
                 for lvls, metrics in self._scenarios.values()
             ],
             axis=0,
@@ -192,7 +208,7 @@ class ScenarioGroups:
         nlvls = df.index.nlevels
         # 4 levels of scenarios: heating, EV, PV, battery; move them forward
         new_order = list(chain(range(nlvls)[-4:], range(nlvls)[:-4]))
-        return df.reorder_levels(new_order)[metric]
+        return df.reorder_levels(new_order)
 
 
 def fraction_by_level(arr: pd.Series, lvl: Union[int, str]) -> pd.Series:
