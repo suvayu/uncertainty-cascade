@@ -32,12 +32,26 @@ def decode_fname(fname: str) -> Tuple[str, str]:
     return heating, charging
 
 
+def decode_link(_idx: pd.Index):
+    transport = _idx.get_level_values("technology").str.startswith("ac_transmission")
+    idx = _idx[transport].str.split(":", expand=True)
+    idx.names = [_idx.name, "link"]
+    return idx, transport
+
+
 def prettify_costs(name: str, pretty: bool) -> Union[str, int]:
     factor = pv_batt_lvls[int(name[-1]) - 1]
     if pretty:
         return name[:-1] + "{:03d}".format(int(factor * 100))
     else:
         return int(factor * 100)
+
+
+def ensure_frame(data: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
+    if isinstance(data, pd.Series):
+        return data.to_frame()
+    else:
+        return data
 
 
 class Metrics:
