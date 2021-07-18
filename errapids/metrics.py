@@ -219,9 +219,9 @@ class ScenarioGroups:
         return df.reorder_levels(new_order)
 
 
-def fraction_by_level(arr: pd.Series, lvl: Union[int, str]) -> pd.Series:
-    """Calculate the fraction out of the total for a given level"""
-    _lvl = arr.index.names.index(lvl) if isinstance(lvl, str) else lvl
+def technology_share(arr: pd.Series) -> pd.Series:
+    """Calculate the technology share"""
+    _lvl = arr.index.names.index("technology")
     # sum over any deeper levels
     numerator = arr.groupby(level=list(range(_lvl + 1))).sum()
     # sum over desired level to get reference
@@ -234,7 +234,7 @@ def metric_as_dfs(datadir: _path_t, glob: str, **kwargs) -> List[pd.DataFrame]:
     metrics = ScenarioGroups.from_dir(datadir, glob, **kwargs)
     alias = {"energy_cap": "nameplate_capacity"}
     dfs = [metrics[name].to_frame().rename(columns=alias) for name in metrics.varnames]
-    prod_share = fraction_by_level(metrics["carrier_prod"], "technology")
+    prod_share = technology_share(metrics["carrier_prod"])
     prod_share.name = "carrier_prod_share"
     dfs.append(prod_share.to_frame().rename(columns=alias))
     return dfs
