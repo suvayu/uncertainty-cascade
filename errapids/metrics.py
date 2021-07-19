@@ -201,9 +201,9 @@ class ScenarioGroups:
     def __getitem__(self, metric: str) -> pd.Series:
         if metric not in self.varnames:
             raise KeyError(f"{metric}: unknown metric")
-        return self.get(metric, summarise=True)
+        return self.get(metric, summarise=True)[metric]
 
-    def get(self, metric: str, summarise: bool) -> Union[pd.Series, pd.DataFrame]:
+    def get(self, metric: str, summarise: bool) -> pd.DataFrame:
         df = pd.concat(
             [
                 ensure_frame(metrics.get(metric, summarise)).assign(
