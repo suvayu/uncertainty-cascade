@@ -1,12 +1,13 @@
 from itertools import chain
 from pathlib import Path
-from typing import Iterable, List, Tuple, Union
+from typing import Iterable, Dict, Literal, Tuple, Union
 
 from glom import glom, Iter
 import numpy as np
 import pandas as pd
 import xarray as xr
 
+from friendly_data.helpers import noop_map
 from errapids.io import _path_t
 from errapids.ons import pv_batt_lvls
 
@@ -230,11 +231,45 @@ def technology_share(arr: pd.Series) -> pd.Series:
     return numerator / denominator
 
 
-def metric_as_dfs(datadir: _path_t, glob: str, **kwargs) -> List[pd.DataFrame]:
+def ratio_groupby(
+    num: Union[pd.Series, pd.DataFrame],
+    den: pd.Series,
+    lvl: Literal["region", "technology"],
+    scale: int,
+) -> pd.Series:
+    """Calculate the ratio of two metrics summing over a given level"""
+    # assume index levels are ordered: region, technology
+    if lvl == "technology":
+        lvls = list(range(num.index.names.index(lvl)))
+    elif lvl == "region":
+        _idx = num.index.names.index(lvl)
+        lvls = list(range(_idx)) + [_idx + 1]
+    else:
+        raise ValueError(f"{lvl=}: unsupported level, cannot sum")
+
+    # sum over any deeper levels
+    num = num.groupby(level=lvls).sum() / scale
+    den = den.groupby(level=lvls).sum()
+    num, den = num.align(den, join="inner", axis=0)
+    return num.div(den, axis=0).dropna()
+
+
+def metric_as_dfs(datadir: _path_t, glob: str, **kwargs) -> Dict[str, pd.Series]:
     metrics = ScenarioGroups.from_dir(datadir, glob, **kwargs)
-    alias = {"energy_cap": "nameplate_capacity"}
-    dfs = [metrics[name].to_frame().rename(columns=alias) for name in metrics.varnames]
-    prod_share = technology_share(metrics["carrier_prod"])
-    prod_share.name = "carrier_prod_share"
-    dfs.append(prod_share.to_frame().rename(columns=alias))
+    alias = noop_map({"energy_cap": "nameplate_capacity"})
+    dfs = {
+        alias[name]: metrics[name].rename(alias[name])
+        for name in metrics.varnames
+        if name != "capacity_factor"
+    }
+    dfs["carrier_prod_share"] = technology_share(metrics["carrier_prod"]).rename(
+        "carrier_prod_share"
+    )
+    dfs["capacity_factor"] = (
+        dfs["carrier_prod"]
+        .div(3)
+        .div(dfs["nameplate_capacity"])
+        .dropna()
+        .rename("capacity_factor")
+    )
     return dfs
