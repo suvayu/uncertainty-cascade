@@ -120,13 +120,14 @@ def facets(df: pd.DataFrame, region: str, stack: str) -> Tuple:
 
 
 def layout(bars, errs, tbl, height):
+    # FIXME: arrange in rows: 2:1, 3
     layout = (
-        hv.Layout(bars + errs + tbl)
+        hv.Layout(tbl + errs + bars)
         .opts(toolbar="right", height=height)
         .opts(
-            opts.Bars(width=2 * height),
-            opts.Spread(width=height),
             opts.Table(width=2 * height),
+            opts.Spread(width=height),
+            opts.Bars(width=2 * height),
         )
         .cols(2)
     )
@@ -177,7 +178,7 @@ class plotmanager:
 
     @property
     def metrics(self):
-        return list(self._arrays)
+        return list(self._arrays) + self._data.derived
 
     @property
     def regions(self) -> List[str]:
