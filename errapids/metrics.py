@@ -1,6 +1,6 @@
 from itertools import chain
 from pathlib import Path
-from typing import Iterable, Dict, Literal, Tuple, Union
+from typing import Iterable, Dict, Literal, Tuple, Union, overload
 
 from glom import glom, Iter
 import numpy as np
@@ -8,9 +8,12 @@ import pandas as pd
 import xarray as xr
 
 from friendly_data.helpers import noop_map
+
+from errapids.err import notrans, scenario_deltas
 from errapids.io import _path_t
 from errapids.ons import pv_batt_lvls
 
+DF_or_Series_t = Union[pd.Series, pd.DataFrame]
 
 _flevel_aliases = {
     "high": ["high", "hi"],
@@ -96,6 +99,14 @@ class Metrics:
     def __getitem__(self, metric: str) -> pd.Series:
         return self.get(metric, summarise=True)
 
+    @overload
+    def get(self, metric: str, summarise: Literal[True]) -> pd.Series:
+        ...
+
+    @overload
+    def get(self, metric: str, summarise: Literal[False]) -> pd.DataFrame:
+        ...
+
     def get(self, metric: str, summarise: bool) -> Union[pd.Series, pd.DataFrame]:
         """Access a metric from the model result"""
         darr = self._dst[metric]
@@ -158,6 +169,8 @@ class ScenarioGroups:
     """Hierachically group model results for different scenarios"""
 
     idxcols = "heating,EV,PV,battery".split(",")
+    _banned = ["capacity_factor"]
+    derived = ["carrier_prod_share", "capacity_factor"]
 
     @classmethod
     def from_dir(cls, dpath: _path_t, glob: str, **kwargs) -> "ScenarioGroups":
@@ -180,7 +193,23 @@ class ScenarioGroups:
             prettify_costs(battery, pretty),
         )
 
-    def __init__(self, scenarios: Iterable[xr.Dataset], pretty: bool = True):
+    # @property
+    # def alias(self):
+    #     return self._alias
+
+    # @alias.setter
+    # def alias(self, alias: Dict[str, str]):
+    #     self._alias = noop_map(alias if alias else {"energy_cap": "nameplate_capacity"})
+    #     self._rev_alias = noop_map((v, k) for k, v in self._alias.items())
+
+    # @property
+    # def ralias(self):
+    #     return self._rev_alias
+
+    def __init__(
+        self, scenarios: Iterable[xr.Dataset], pretty: bool = True, alias: Dict = {}
+    ):
+        # self.alias = alias
         self._scenarios = {
             dst.scenario: (
                 self.__unpack_overrides__(dst.applied_overrides, pretty),
@@ -189,10 +218,16 @@ class ScenarioGroups:
             for dst in scenarios
         }
         self.varnames = glom(
-            self._scenarios.values(), (Iter("1._dst.data_vars").first(), list)
+            self._scenarios.values(),
+            (
+                Iter("1._dst.data_vars").first(),
+                list,
+                Iter().filter(lambda v: v not in self._banned).all(),
+            ),
         )
         dst = glom(self._scenarios.values(), Iter("1").first())
         self.varnames_ts = [var for var in self.varnames if dst.is_tseries(var)]
+        self.metrics = self.varnames + self.derived
 
     def __repr__(self) -> str:
         return "\n---\n".join(
@@ -200,11 +235,16 @@ class ScenarioGroups:
         )
 
     def __getitem__(self, metric: str) -> pd.Series:
-        if metric not in self.varnames:
+        if metric in self.varnames:
+            return self.get(metric, summarise=True)[metric]
+        elif metric in self.derived:
+            return self.derive(metric, summarise=True)[metric]
+        else:
             raise KeyError(f"{metric}: unknown metric")
-        return self.get(metric, summarise=True)[metric]
 
     def get(self, metric: str, summarise: bool) -> pd.DataFrame:
+        if metric in self._banned:
+            raise ValueError(f"{metric}: derived metric, use `derive(..)`")
         df = pd.concat(
             [
                 ensure_frame(metrics.get(metric, summarise)).assign(
@@ -219,9 +259,25 @@ class ScenarioGroups:
         new_order = list(chain(range(nlvls)[-4:], range(nlvls)[:-4]))
         return df.reorder_levels(new_order)
 
+    def derive(self, metric: str, summarise: bool = True) -> pd.DataFrame:
+        if metric == "carrier_prod_share":
+            return technology_share(self["carrier_prod"]).rename(metric).to_frame()
+        elif metric == "capacity_factor":
+            prod = self.get("carrier_prod", summarise)  # maybe a time-series
+            # capacity = self["nameplate_capacity"]
+            capacity = self["energy_cap"]
+            res = _ratio(prod, capacity, scale=3)
+            if res.shape[1] == 1:
+                return res.rename(columns={"carrier_prod": metric})
+            else:
+                return res
+        else:
+            raise RuntimeError("shouldn't be here, panic!")
+
 
 def technology_share(arr: pd.Series) -> pd.Series:
     """Calculate the technology share"""
+    arr = notrans(arr)
     _lvl = arr.index.names.index("technology")
     # sum over any deeper levels
     numerator = arr.groupby(level=list(range(_lvl + 1))).sum()
@@ -231,45 +287,50 @@ def technology_share(arr: pd.Series) -> pd.Series:
     return numerator / denominator
 
 
-def ratio_groupby(
-    num: Union[pd.Series, pd.DataFrame],
-    den: pd.Series,
-    lvl: Literal["region", "technology"],
-    scale: int,
-) -> pd.Series:
-    """Calculate the ratio of two metrics summing over a given level"""
-    # assume index levels are ordered: region, technology
-    if lvl == "technology":
-        lvls = list(range(num.index.names.index(lvl)))
-    elif lvl == "region":
-        _idx = num.index.names.index(lvl)
-        lvls = list(range(_idx)) + [_idx + 1]
+def _ratio(num: DF_or_Series_t, den: pd.Series, *, scale: int) -> DF_or_Series_t:
+    num, den = num.align(den, join="inner", axis=0)
+    if num.ndim > 1:
+        return num.div(scale).div(den, axis=0).dropna()
     else:
-        raise ValueError(f"{lvl=}: unsupported level, cannot sum")
+        return num.div(scale).div(den).dropna()
+
+
+def ratio_groupby(
+    num: DF_or_Series_t,
+    den: pd.Series,
+    lvl: str,
+    *,
+    scale: int,
+) -> DF_or_Series_t:
+    """Calculate the ratio of two metrics summing over a given level"""
+    common = set(num.index.names).intersection(den.index.names)
+    lvls = [i for i in num.index.names if i in common]
+    lvls.pop(lvls.index(lvl))
+    if (lvl not in num.index.names) or (lvl not in den.index.names):
+        raise ValueError(f"{lvl=}: not in index, cannot sum")
 
     # sum over any deeper levels
-    num = num.groupby(level=lvls).sum() / scale
+    num = num.groupby(level=lvls).sum()
     den = den.groupby(level=lvls).sum()
-    num, den = num.align(den, join="inner", axis=0)
-    return num.div(den, axis=0).dropna()
+    return _ratio(num, den, scale=scale)
 
 
-def metric_as_dfs(datadir: _path_t, glob: str, **kwargs) -> Dict[str, pd.Series]:
-    metrics = ScenarioGroups.from_dir(datadir, glob, **kwargs)
-    alias = noop_map({"energy_cap": "nameplate_capacity"})
-    dfs = {
-        alias[name]: metrics[name].rename(alias[name])
-        for name in metrics.varnames
-        if name != "capacity_factor"
-    }
-    dfs["carrier_prod_share"] = technology_share(metrics["carrier_prod"]).rename(
-        "carrier_prod_share"
-    )
-    dfs["capacity_factor"] = (
-        dfs["carrier_prod"]
-        .div(3)
-        .div(dfs["nameplate_capacity"])
-        .dropna()
-        .rename("capacity_factor")
-    )
-    return dfs
+def pan_eu_cf(prod, cap, groupby: str) -> pd.DataFrame:
+    lvls = {"region", "technology"}
+    if groupby not in lvls:
+        raise ValueError(f"{groupby}: unknow level")
+    tosum, *_ = lvls - {groupby}
+    prod = notrans(prod)
+    cap = notrans(cap)
+    cf = ratio_groupby(prod, cap, tosum, scale=3).rename(f"capacity_factor_{groupby}")
+    return scenario_deltas(cf)
+
+
+def pan_eu_prod_share(arr: pd.Series) -> pd.DataFrame:
+    # swap region, technology
+    lvls = list(arr.index.names)
+    ridx = lvls.index("region")
+    tidx = lvls.index("technology")
+    lvls[ridx], lvls[tidx] = lvls[tidx], lvls[ridx]
+    arr = technology_share(arr.reorder_levels(lvls))
+    return scenario_deltas(arr.rename("carrier_prod_share_all"))

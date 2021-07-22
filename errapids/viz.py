@@ -1,196 +1,22 @@
-from itertools import cycle, islice
+from errapids.io import HDF5Reader
+from itertools import cycle, islice, product
 from logging import getLogger
-from typing import Dict, List, Sequence, Tuple, TypeVar, Union
+from typing import List, Tuple
 from holoviews.core.spaces import HoloMap
 
 import numpy as np
 import pandas as pd
+from pycountry import countries
 from tqdm import tqdm
 
 import holoviews as hv
 from holoviews import opts
 
-from errapids.metrics import metric_as_dfs
+from errapids.err import baselines, qsum, rgroups, scenario_deltas
+from errapids.metrics import ScenarioGroups, pan_eu_cf, pan_eu_prod_share
 
 logger = getLogger(__name__)
-
-
-# region groups
-rgroups = {
-    "nordic": ["DNK", "FIN", "NOR", "SWE"],  # scandinavia
-    "baltic": ["EST", "LTU", "LVA"],  # east of scandinavia
-    "poland": ["POL"],  # poland
-    "west": ["DEU", "FRA", "NLD", "LUX"],  # west
-    "med": ["ESP", "ITA", "GRC", "PRT"],  # mediterranean
-    "isles": ["GBR", "IRL"],  # british isles
-    "balkan": ["MKD", "ROU", "SRB", "SVN", "HRV"],  # balkan with coast line
-    "landlocked": ["SVK", "HUN", "CZE"],  # land locked
-}
-# scenario baselines
-baselines = {
-    "heating": "mid",
-    "EV": "low",
-    "PV": 100,
-    "battery": 100,
-    "demand": ["PV", "battery"],  # order same as in index
-    "cost": ["heating", "EV"],
-    "all": [],  # no pins
-}
-
-
-def _isgrouped(scenario: str) -> bool:
-    """Check if scenario is a meta (grouped) scenario
-
-    Convention: for a regular scenario, the value is the baseline value.  For a
-    grouped scenario, it is a list of other scenarios that are pinned to their
-    baselines.
-
-    """
-    return isinstance(baselines[scenario], list)
-
-
-def qsum(data: Sequence) -> float:
-    """Add in quadrature, typically uncertainties
-
-    .. math::
-
-    \\sqrt{\\sum_{i=1}^{n} x^2_i}
-
-    """
-    return np.sqrt(np.square(data).sum())
-
-
-DFSeries_t = TypeVar("DFSeries_t", pd.DataFrame, pd.Series)
-
-
-def lvl_filter(
-    df: DFSeries_t, lvl: str, token: str, invert: bool = True, reverse: bool = False
-) -> DFSeries_t:
-    """Filter a dataframe by the values in the index at the specified level
-
-    Parameters
-    ----------
-    df : Union[pandas.DataFrame, pandas.Series]
-        Dataframe/series
-
-    lvl : str
-        Level name
-
-    invert : bool (default: True)
-        Whether to filter out (default) matches, or select matches
-
-    reverse : bool (default: False)
-        Whether to match the start (default) or end of the value
-
-    Returns
-    -------
-    Union[pandas.DataFrame, pandas.Series]
-        The filtered dataframe/series
-
-    """
-    if reverse:
-        sel = df.index.get_level_values(lvl).str.endswith(token)
-    else:
-        sel = df.index.get_level_values(lvl).str.startswith(token)
-    return df[~sel if invert else sel]
-
-
-def marginalise(df: pd.DataFrame, scenario: str) -> Union[pd.DataFrame, pd.Series]:
-    """Marginalise all scenarios except the one specified.
-
-    Pin all scenarios except the one specified to their baselines, and
-    calculate the uncertainty based on the remaining scenarios.  The lower and
-    upper values are put in columns `errlo` and `errhi`.  The returned
-    dataframe has the columns: `<original column>`, `errlo`, and `errhi`.
-
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        Dataframe
-
-    scenario : str
-        The scenario name; should be one of the scenarios defined in `baselines`
-
-    Returns
-    -------
-    NDFrame
-        The marginalised dataframe/series
-
-    """
-    colname = df.columns[0]
-    if scenario not in baselines:
-        raise ValueError(f"unknown {scenario=}: must be one of {list(baselines)}")
-
-    # pin other scenarios
-    pins = (
-        [sc for sc in baselines[scenario]]
-        if _isgrouped(scenario)
-        else [sc for sc in baselines if sc != scenario and not _isgrouped(sc)]
-    )
-    if pins:
-        query = [f"{sc} == {baselines[sc]!r}" for sc in pins]
-        df = df.query(" & ".join(query))
-        df.index = df.index.droplevel(pins)
-
-    unpinned = [
-        baselines[sc] for sc in baselines if sc not in pins and not _isgrouped(sc)
-    ]
-    df = df.unstack(list(range(len(unpinned))))
-    baseline = df[(colname, *unpinned) if unpinned else colname]
-    names = [colname, "errlo", "errhi"]
-    if df.ndim > 1:
-        deltas = [(df.apply(f, axis=1) - baseline).abs() for f in (np.min, np.max)]
-        df = pd.concat([baseline, *deltas], axis=1)
-        df.columns = names
-        return df
-    else:  # series
-        deltas = [np.abs(f(df) - baseline) for f in (np.min, np.max)]
-        return pd.Series([baseline, *deltas], index=names)
-
-
-def scenario_deltas(df: pd.DataFrame, istransmission: bool = False) -> pd.DataFrame:
-    """Calculate uncertainties for different scenarios.
-
-    This adds a new level in the index for every scenario.
-
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        Dataframe
-
-    istransmission : bool (default: False)
-        Whether to consider transmission data or not
-
-    Returns
-    -------
-    pandas.DataFrame
-
-    """
-    if "technology" in df.index.names:
-        df = lvl_filter(df, "technology", "ac_transmission", invert=not istransmission)
-    if df.empty:
-        raise ValueError(f"{istransmission=}: returned empty dataframe")
-    if "carrier" in df.index.names:  # redundant for us
-        df.index = df.index.droplevel("carrier")
-
-    # FIXME: instead of iterating, could do it by generating the right indices
-    # in marginalise
-    dfs = []
-    for scenario in baselines:
-        _df = marginalise(df, scenario)
-        if isinstance(_df, pd.DataFrame):
-            null = _df.apply(lambda row: np.isclose(row, 0).all(), axis=1)
-            _df = (
-                _df[~null].assign(scenario=scenario).set_index("scenario", append=True)
-            )
-        else:  # series
-            _df = pd.DataFrame([_df], index=pd.Index([scenario], name="scenario"))
-        dfs.append(_df)
-    df = pd.concat(dfs, axis=0)
-    if isinstance(df.index, pd.MultiIndex):
-        return df.reindex(index=list(baselines), level="scenario")
-    else:
-        return df.reindex(index=list(baselines))
+ix = pd.IndexSlice
 
 
 def facets(df: pd.DataFrame, region: str, stack: str) -> Tuple:
@@ -222,6 +48,7 @@ def facets(df: pd.DataFrame, region: str, stack: str) -> Tuple:
     """
     name = df.columns[0]
 
+    # for total_* metrics
     if not isinstance(df.index, pd.MultiIndex):
         assert df.index.name == "scenario"
         rmax = 1.2 * df[[name, "errhi"]].sum(axis=1).max()
@@ -236,6 +63,7 @@ def facets(df: pd.DataFrame, region: str, stack: str) -> Tuple:
     if stack and stack not in df.index.names:
         raise ValueError(f"{name}: {stack=} not present")
 
+    # systemwide_* metrics do not have regions
     if region and "region" in df.index.names:
         grp = rgroups[region]  # noqa, choose region, implicitly used in df.query(..)
         df = df.query("region in @grp")
@@ -305,6 +133,23 @@ def layout(bars, errs, tbl, height):
     return layout
 
 
+def draw_panel(df):
+    if df.index.names[0] == "region":
+        _title = lambda k: countries.lookup(k).name
+    else:
+        _title = lambda k: k
+    # df.index.names == [key, "scenario"]
+    plots = [
+        (
+            hv.Spread(df.loc[ix[key, :], :], vdims=list(df.columns), kdims=["scenario"])
+            * hv.HLine(df.loc[ix[key, "all"], :].iloc[0])
+        ).opts(width=400, height=300, tools=["hover"], title=_title(key))
+        for key in df.index.levels[0]
+    ]
+    plots.append(hv.Table(df.reset_index()))
+    return plots
+
+
 class plotmanager:
     """Manage and render the plots
 
@@ -314,24 +159,42 @@ class plotmanager:
 
     """
 
-    def __init__(self, datadir: str, glob: str, istransmission: bool = False):
-        self._dfs = {
-            df.columns[0]: scenario_deltas(df, istransmission)
-            for df in metric_as_dfs(datadir, glob, pretty=False)
+    @classmethod
+    def from_netcdf(cls, datadir: str, glob: str, **kwargs):
+        return cls(ScenarioGroups.from_dir(datadir, glob, pretty=False), **kwargs)
+
+    @classmethod
+    def from_hdf5(cls, h5path: str, **kwargs):
+        return cls(HDF5Reader(h5path), **kwargs)
+
+    def __init__(self, data, istransmission: bool = False):
+        self._data = data
+        self._arrays = {
+            name: scenario_deltas(self._data[name], istransmission)
+            for name in self._data.metrics
+            if name not in self._data.derived
         }
 
     @property
     def metrics(self):
-        return list(self._dfs)
+        return list(self._arrays)
 
     @property
     def regions(self) -> List[str]:
         return list(rgroups)
 
-    def plot(
+    def agg_capacity_factor(self, groupby: str):
+        df = pan_eu_cf(self._data["carrier_prod"], self._data["energy_cap"], groupby)
+        return hv.Layout(draw_panel(df)).opts(toolbar="right").cols(3)
+
+    def agg_carrier_prod_share(self):
+        df = pan_eu_prod_share(self._data["carrier_prod"])
+        return hv.Layout(draw_panel(df)).opts(toolbar="right").cols(3)
+
+    def agg_plot(
         self, metric: str, region: str, stack: str, height: int = 400
     ) -> hv.Layout:
-        """Render plot
+        """Render an aggregated plot
 
         Parameters
         ----------
@@ -353,7 +216,9 @@ class plotmanager:
             A 2-column ``hvplot.Layout`` with the different facets of the plot
 
         """
-        bars, errs, tbl = facets(self._dfs[metric], region, stack)
+        if metric in self._data.derived:
+            raise ValueError(f"{metric}: derived metric, cannot draw aggregated plot")
+        bars, errs, tbl = facets(self._arrays[metric], region, stack)
         return layout(bars, errs, tbl, height)
 
     def write(self, plotdir: str):
@@ -365,15 +230,24 @@ class plotmanager:
             Plot directory
 
         """
-        pbar = tqdm(self.metrics)
-        for metric in pbar:
-            pbar.set_description(f"{metric}")
+        pbar1 = tqdm(self.metrics)
+        for metric in pbar1:
+            pbar1.set_description(f"{metric}")
             if "total" in metric or "systemwide" in metric:
-                hv.save(self.plot(metric, "", ""), f"{plotdir}/{metric}.html")
+                hv.save(self.agg_plot(metric, "", ""), f"{plotdir}/{metric}.html")
+            elif metric in self._data.derived:
+                if metric == "capacity_factor":
+                    for groupby in ("region", "technology"):
+                        plot = self.agg_capacity_factor(groupby)
+                        hv.save(plot, f"{plotdir}/{metric}_{groupby}.html")
+                elif metric == "carrier_prod_share":
+                    plot = self.agg_carrier_prod_share()
+                    hv.save(plot, f"{plotdir}/{metric}.html")
+                else:
+                    RuntimeError("don't know how it got here")
             else:
                 pbar2 = tqdm(rgroups)
-                for region in pbar2:
+                for region, stack in product(pbar2, ("region", "technology")):
                     pbar2.set_description(f"{region=}")
-                    for stack in ("region", "technology"):
-                        plots = self.plot(metric, region, stack)
-                        hv.save(plots, f"{plotdir}/{metric}_{region}_{stack}.html")
+                    plots = self.agg_plot(metric, region, stack)
+                    hv.save(plots, f"{plotdir}/{metric}_{region}_{stack}.html")
