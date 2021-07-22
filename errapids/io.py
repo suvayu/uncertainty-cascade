@@ -71,3 +71,23 @@ def destinee2calliope_csv(inpath: _path_t, outpath: _path_t, to_yr: int):
     # NOTE: match datetime format with capacity factor timeseries
     df = read_csv_to_df(inpath, to_yr=to_yr)
     df.to_csv(outpath, date_format="%Y-%m-%d %H:%M")  # , float_format="{0:.5f}".format)
+
+
+class HDF5Reader:
+    derived = ["carrier_prod_share", "capacity_factor"]
+
+    def __init__(self, path: _path_t) -> None:
+        self.store = pd.HDFStore(path)
+        self.metrics = [k.split("/")[-1] for k in self.store.keys() if "metric" in k]
+
+    def paths(self, filter_token: str):
+        return [k for k in self.store.keys() if filter_token in k]
+
+    def __getitem__(self, key: str):
+        return self.metric(key)
+
+    def metric(self, key: str):
+        return self.store.get(f"metrics/{key}")
+
+    def delta(self, key: str):
+        return self.store.get(f"deltas/{key}")
