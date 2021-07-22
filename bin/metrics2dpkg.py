@@ -10,7 +10,8 @@ from friendly_data.cli import _metadata
 from friendly_data.converters import from_df
 from friendly_data.dpkg import create_pkg, write_pkg, _resource
 
-from errapids.metrics import metric_as_dfs
+from errapids.err import scenario_deltas
+from errapids.metrics import ScenarioGroups, pan_eu_cf, pan_eu_prod_share
 
 parser = ArgumentParser(description=__doc__)
 parser.add_argument("datadir", help="directory with NetCDF files from Calliope run")
@@ -23,11 +24,25 @@ parser.add_argument(
 if __name__ == "__main__":
     opts = parser.parse_args()
 
-    dfs = metric_as_dfs(opts.datadir, "out_scenario*.nc")
-    resources = [
-        from_df(df, basepath=opts.outdir, alias={"energy_cap": "nameplate_capacity"})
-        for df in dfs
-    ]
+    scgrp = ScenarioGroups.from_dir(opts.datadir, "out_scenario*.nc", pretty=False)
+
+    arrs = [scgrp[metric] for metric in scgrp.varnames + scgrp.derived]
+    resources = [from_df(arr, basepath=opts.outdir) for arr in arrs]
+
+    deltas = [scenario_deltas(arr) for arr in arrs]
+    deltas.extend(
+        [
+            pan_eu_cf(scgrp["carrier_prod"], scgrp["energy_cap"], grpby)
+            for grpby in ("region", "technology")
+        ]
+    )
+    deltas.append(pan_eu_prod_share(scgrp["carrier_prod"]))
+    resources.extend(
+        [
+            from_df(df, basepath=opts.outdir, datapath=f"deltas/{df.columns[0]}.csv")
+            for df in deltas
+        ]
+    )
 
     meta = _metadata(["name", "licenses"], metadata=opts.metadata)
     meta.update(version=pkg_resources.require("errapids")[0].version)
