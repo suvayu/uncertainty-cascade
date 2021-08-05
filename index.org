@@ -6,13 +6,19 @@ The plots are grouped in two ways, by country and by technology.  To
 keep the plots manageable, the countries have been grouped as shown
 in the table below.  Transmission is not included for the moment.
 
-| nordic | baltic | poland | west | med | isles | balkan | landlocked |
-|--------+--------+--------+------+-----+-------+--------+------------|
-| DNK    | EST    | POL    | DEU  | ESP | GBR   | MKD    | SVK        |
-| FIN    | LTU    |        | FRA  | ITA | IRL   | ROU    | HUN        |
-| NOR    | LVA    |        | NLD  | GRC |       | SRB    | CZE        |
-| SWE    |        |        | LUX  | PRT |       | SVN    |            |
-|        |        |        |      |     |       | HRV    |            |
+| nordic | baltic | west | med | isles | balkan |
+|--------+--------+------+-----+-------+--------|
+| DNK    | EST    | DEU  | ESP | GBR   | MKD    |
+| FIN    | LTU    | FRA  | ITA | IRL   | ROU    |
+| NOR    | LVA    | NLD  | GRC |       | SRB    |
+| SWE    |        | LUX  | PRT |       | SVN    |
+|        |        | BEL  |     |       | HRV    |
+|        |        | POL  |     |       | ALB    |
+|        |        | CHE  |     |       | BIH    |
+|        |        | AUT  |     |       | BGR    |
+|        |        |      |     |       | SVK    |
+|        |        |      |     |       | HUN    |
+|        |        |      |     |       | CZE    |
 
 To compare the variation between different scenarios, they are treated
 in groups: building heating, EV charging, PV cost, and battery cost.
