@@ -60,6 +60,8 @@ chose this to make it easier to compare.
 #+end_src
 
 #+RESULTS:
+- file:capacity_factor_region.html
+- file:capacity_factor_technology.html
 - file:carrier_con_balkan_region.html
 - file:carrier_con_balkan_technology.html
 - file:carrier_con_baltic_region.html
@@ -82,6 +84,7 @@ chose this to make it easier to compare.
 - file:carrier_prod_med_technology.html
 - file:carrier_prod_nordic_region.html
 - file:carrier_prod_nordic_technology.html
+- file:carrier_prod_share.html
 - file:carrier_prod_west_region.html
 - file:carrier_prod_west_technology.html
 - file:cost_balkan_region.html
@@ -132,6 +135,7 @@ chose this to make it easier to compare.
 - file:energy_cap_nordic_technology.html
 - file:energy_cap_west_region.html
 - file:energy_cap_west_technology.html
+- file:eu_scenario_group_delta.html
 - file:resource_area_balkan_region.html
 - file:resource_area_balkan_technology.html
 - file:resource_area_baltic_region.html
