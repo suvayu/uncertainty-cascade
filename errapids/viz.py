@@ -1,8 +1,6 @@
 from errapids.io import HDF5Reader
-from itertools import cycle, islice, product
-from logging import getLogger
+from itertools import product
 from typing import List, Tuple
-from holoviews.core.spaces import HoloMap
 
 import numpy as np
 import pandas as pd
@@ -10,145 +8,117 @@ from pycountry import countries
 from tqdm import tqdm
 
 import holoviews as hv
-from holoviews import opts
+import seaborn as sns
 
-from errapids.err import baselines, qsum, rgroups, scenario_deltas
+from errapids.err import add_groups
+from errapids.err import aggregate
+from errapids.err import rgroups
+from errapids.err import scenario_deltas
 from errapids.metrics import ScenarioGroups, pan_eu_cf, pan_eu_prod_share
 
-logger = getLogger(__name__)
 ix = pd.IndexSlice
 
 
-def facets(df: pd.DataFrame, region: str, stack: str) -> Tuple:
-    """Create a bar chart, and a faceted set of uncertainties
-
-    The number of countries are limited to the ``region`` defined in `rgroups`.
-    The index level (or dimension) ``stack`` is "stacked" in the summary plot,
-    and summed over in the undertainty plots.  The unceratainty plots are
-    faceted over the "remaining" index level (or dimension) - "region" or
-    "technology".
-
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        Dataframe
-
-    region : str
-        Region group, as defined in `rgroups`
-
-    stack : str
-        Index level (or dimension) to stack/sum over
-
-    Returns
-    -------
-    Tuple[holoviews.Bars, holoviews.HoloMap, holoviews.HoloMap]
-        The plot elements, the holomaps contain faceted uncertainty spreads,
-        and the corresponding tables
-
-    """
-    name = df.columns[0]
-
-    # for total_* metrics
-    if not isinstance(df.index, pd.MultiIndex):
-        assert df.index.name == "scenario"
-        rmax = 1.2 * df[[name, "errhi"]].sum(axis=1).max()
-        bars = hv.Bars(df, vdims=[name], kdims=["scenario"]).opts(
-            tools=["hover"], ylim=(0, rmax)
-        )
-        errs = hv.Spread(df, vdims=[name, "errlo", "errhi"], kdims=["scenario"]).opts(
-            fill_alpha=0.7
-        ) * hv.HLine(df.iloc[0, 0])
-        return bars, errs, hv.Table(df.reset_index())
-
-    if stack and stack not in df.index.names:
-        raise ValueError(f"{name}: {stack=} not present")
-
-    # systemwide_* metrics do not have regions
-    if region and "region" in df.index.names:
-        grp = rgroups[region]  # noqa, choose region, implicitly used in df.query(..)
-        df = df.query("region in @grp")
-    elif region:
-        logger.warning(f"{name}: no region level in index, {region=} ignored")
-    else:
-        logger.info(f"{name}: no region level in index")
-
-    grpd = df.groupby(df.index.names.difference([stack])).agg(
-        {name: np.sum, "errlo": qsum, "errhi": qsum}
-    )
-    if isinstance(grpd.index, pd.MultiIndex):
-        grpd = grpd.reindex(index=list(baselines), level="scenario")
-    else:
-        grpd = grpd.reindex(index=list(baselines))
-
-    space = 1.7 if stack == "technology" else 1.2
-    rmax = space * grpd[[name, "errhi"]].sum(axis=1).max()
-
-    # maintain original order
-    kdims = df.index.names.difference(["scenario"])
-    if stack:
-        stackidx = kdims.index(stack)
-        kdims = list(islice(cycle(kdims), stackidx + 1, stackidx + 1 + len(kdims)))
-    bars = hv.Bars(df.query("scenario == 'all'"), vdims=[name], kdims=kdims).opts(
-        stacked=bool(stack), tools=["hover"], ylim=(0, rmax)
-    )
-
-    faceted_lvl = grpd.index.names[0]
-    if isinstance(grpd.index, pd.MultiIndex):
-        lvl_vals = grpd.index.levels[grpd.index.names.index(faceted_lvl)]
-    else:
-        lvl_vals = grpd.index
-    errs = HoloMap(
-        {
-            val: (
-                hv.Spread(
-                    grpd.loc[val, :], vdims=list(grpd.columns), kdims=["scenario"]
-                ).opts(fill_alpha=0.7, ylim=(0, rmax))
-                * hv.HLine(grpd.loc[val, name].iloc[0])
-            )
-            for val in lvl_vals
-        },
-        kdims=[faceted_lvl],
-    )
-    tbl = HoloMap(
-        {
-            val: hv.Table(df.query(f"{faceted_lvl} == @val").reset_index())
-            for val in lvl_vals
-        },
-        kdims=[faceted_lvl],
-    )
-    return bars, errs, tbl
-
-
-def layout(bars, errs, tbl, height):
-    # FIXME: arrange in rows: 2:1, 3
-    layout = (
-        hv.Layout(tbl + errs + bars)
-        .opts(toolbar="right", height=height)
-        .opts(
-            opts.Table(width=2 * height),
-            opts.Spread(width=height),
-            opts.Bars(width=2 * height),
-        )
-        .cols(2)
-    )
-    return layout
-
-
-def draw_panel(df):
-    if df.index.names[0] == "region":
+def facets1(df: pd.DataFrame, facet: str):
+    opts = {"width": 400, "height": 300, "tools": ["hover"]}
+    if facet == "region":
         _title = lambda k: countries.lookup(k).name
     else:
         _title = lambda k: k
-    # df.index.names == [key, "scenario"]
-    plots = [
-        (
-            hv.Spread(df.loc[ix[key, :], :], vdims=list(df.columns), kdims=["scenario"])
-            * hv.HLine(df.loc[ix[key, "all"], :].iloc[0])
-        ).opts(width=400, height=300, tools=["hover"], title=_title(key))
-        for key in df.index.levels[0]
-    ]
+
+    plots = []
+    if not isinstance(df.index, pd.MultiIndex):
+        assert df.index.name == "scenario"
+        err = hv.Spread(df, vdims=list(df.columns), kdims=["scenario"])
+        ref = hv.HLine(df.iloc[0, 0])
+        plots.append((err * ref).opts(**opts))
+    else:
+        for key in df.index.levels[df.index.names.index(facet)]:
+            _df = df.query(f"{facet} == '{key}'")
+            if _df.empty:
+                continue
+            err = hv.Spread(_df, vdims=list(df.columns), kdims=["scenario"])
+            ref = hv.HLine(_df.query("scenario == 'all'").iloc[0, 0])
+            plots.append((err * ref).opts(**opts, title=_title(key)))
     plots.append(hv.Table(df.reset_index()))
     return plots
+
+
+def facets2(df: pd.DataFrame, facets: List[str]):
+    assert len(facets) == 2
+
+    opts = {"width": 400, "height": 300, "tools": ["hover"]}
+    if "region" in facets:
+        _title = lambda k: countries.lookup(k).name
+    else:
+        _title = lambda k: k
+
+    plots = []
+    for region, tech_grp in (
+        df.index.droplevel(df.index.names.difference(facets)).unique().to_flat_index()
+    ):
+        _df = df.query(f"{facets[0]} == '{region}' & {facets[1]} == '{tech_grp}'")
+        err = hv.Spread(_df, vdims=list(df.columns), kdims=["scenario"])
+        ref = hv.HLine(_df.query("scenario == 'all'").iloc[0, 0])
+        plots.append((err * ref).opts(**opts, title=f"{_title(region)} - {tech_grp}"))
+    plots.append(hv.Table(df.reset_index()))
+    return plots
+
+
+def get_ylimits(df: pd.DataFrame) -> Tuple[float, float]:
+    name = df.columns[0]
+    space = 1.7
+    rmax = space * df[[name, "errhi"]].sum(axis=1).max()
+    rmin = space * df[[name, "errlo"]].diff(periods=-1, axis=1)[name].min()
+    if rmin < 0:
+        rmax = 0.05
+    else:
+        rmin = -0.05
+    return rmin, rmax
+
+
+def barchart(df: pd.DataFrame, sumover: str):
+    name = df.columns[0]
+    opts = {
+        "width": 400,
+        "height": 300,
+        "stacked": True,
+        "tools": ["hover"],
+        "title": name,
+    }
+
+    if not sumover:
+        return [
+            hv.Bars(df.iloc[:, 0], vdims=[name], kdims=list(df.index.names[:-1])).opts(
+                **{**opts, "stacked": False, "ylim": get_ylimits(df)}
+            )
+        ]
+
+    # order matters
+    kdims = ["region", "technology"]
+    if 0 == kdims.index(sumover):  # cycle order
+        kdims.reverse()
+
+    if sumover == "technology":
+        plots = []
+        for grp in df.index.levels[df.index.names.index(f"{sumover}_grp")]:
+            _df = df.xs((grp, "all"), level=[f"{sumover}_grp", "scenario"])
+            plots.append(
+                hv.Bars(
+                    _df,
+                    vdims=[name],
+                    kdims=kdims,
+                ).opts(**{**opts, "ylim": get_ylimits(_df), "title": f"{name} - {grp}"})
+            )
+        return plots
+    else:
+        _df = df.xs("all", level="scenario")
+        return [
+            hv.Bars(_df, vdims=[name], kdims=kdims,).opts(
+                **opts,
+                ylim=get_ylimits(_df),
+            )
+        ]
 
 
 class plotmanager:
@@ -161,20 +131,37 @@ class plotmanager:
     """
 
     @classmethod
-    def from_netcdf(cls, datadir: str, glob: str, **kwargs):
-        return cls(ScenarioGroups.from_dir(datadir, glob, pretty=False), **kwargs)
+    def from_netcdf(cls, datadir: str, glob: str):
+        return cls(ScenarioGroups.from_dir(datadir, glob, pretty=False))
 
     @classmethod
-    def from_hdf5(cls, h5path: str, **kwargs):
-        return cls(HDF5Reader(h5path), **kwargs)
+    def from_hdf5(cls, h5path: str):
+        return cls(HDF5Reader(h5path))
 
-    def __init__(self, data, istransmission: bool = False):
+    def __init__(self, data):
         self._data = data
-        self._arrays = {
-            name: scenario_deltas(self._data[name], istransmission)
-            for name in self._data.metrics
-            if name not in self._data.derived
-        }
+        self._arrays = {}
+        self._trans = {}
+        for name in self._data.metrics:
+            if name in self._data.derived or name == "cost_var":
+                continue
+            df = self._data[name]
+            self._arrays[name] = scenario_deltas(df, False)
+            if "total" in name or "system" in name:
+                # no facet over region => no need for region or technology groups
+                continue
+            if "technology" in df.index.names and list(
+                filter(
+                    lambda i: i.startswith("ac_trans"),
+                    df.index.levels[df.index.names.index("technology")],
+                )
+            ):
+                self._trans[name] = scenario_deltas(df, True)
+            self._arrays[name] = (
+                self._arrays[name]
+                .pipe(add_groups, "technology")
+                .pipe(add_groups, "region")
+            )
 
     @property
     def metrics(self):
@@ -184,43 +171,86 @@ class plotmanager:
     def regions(self) -> List[str]:
         return list(rgroups)
 
-    def agg_capacity_factor(self, groupby: str):
-        df = pan_eu_cf(self._data["carrier_prod"], self._data["energy_cap"], groupby)
-        return hv.Layout(draw_panel(df)).opts(toolbar="right").cols(3)
+    @classmethod
+    def facet(cls, sumover: str) -> str:
+        if sumover:
+            assert sumover in ("region", "technology")
+            return "technology" if sumover == "region" else "region"
+        else:
+            return "technology"
+
+    def agg_capacity_factor(self, sumover: str):
+        df = pan_eu_cf(self._data["carrier_prod"], self._data["energy_cap"], sumover)
+        return facets1(df, self.facet(sumover))
 
     def agg_carrier_prod_share(self):
         df = pan_eu_prod_share(self._data["carrier_prod"])
-        return hv.Layout(draw_panel(df)).opts(toolbar="right").cols(3)
+        return facets1(df, "technology")
 
-    def agg_plot(
-        self, metric: str, region: str, stack: str, height: int = 400
-    ) -> hv.Layout:
-        """Render an aggregated plot
+    def regionwise_bands(self, scenarios, transmission: bool = False):
+        alphas = {"all": 1, "demand": 1, "cost": 1}
+        bands = []
+        dfs = self._trans if transmission else self._arrays
+        for metric, df in dfs.items():
+            if "system" in metric or "total" in metric:
+                continue
+            if transmission:
+                _df = aggregate(df, "technology", trans=True).loc[ix[:, scenarios], :]
+            else:
+                _df = (
+                    aggregate(df, "technology")
+                    .droplevel(["region_grp"])
+                    .xs("prod", level="technology_grp")
+                    .loc[ix[:, scenarios], :]
+                )
+            _df = sort_by_col(_df, scenarios[0])
+            bands.append(
+                hv.NdOverlay(
+                    {
+                        lvl: hv.Spread(
+                            _df.xs(lvl, level="scenario").head(10),
+                            vdims=list(_df.columns),
+                            kdims="region",
+                        ).opts(tools=["hover"])
+                        for lvl in _df.index.levels[-1]
+                    },
+                    kdims="scenarios",
+                ).opts(width=500, height=300)
+                * hv.Curve(
+                    _df.xs(scenarios[0], level="scenario").head(10),
+                    vdims=_df.columns[0],
+                    kdims="region",
+                ).opts(line_color="black")
+            )
+        return bands
 
-        Parameters
-        ----------
-        metric : str
-            Metric to plot
-
-        region : str
-            Region subset to include in plot
-
-        stack : str
-            Index level to stack
-
-        height : int (default: 400)
-            Height of individual plots, everything else is scaled accordingly
-
-        Returns
-        -------
-        hvplot.Layout
-            A 2-column ``hvplot.Layout`` with the different facets of the plot
-
-        """
+    def agg(self, metric: str, sumover: str, region_grp: str):
         if metric in self._data.derived:
             raise ValueError(f"{metric}: derived metric, cannot draw aggregated plot")
-        bars, errs, tbl = facets(self._arrays[metric], region, stack)
-        return layout(bars, errs, tbl, height)
+
+        if "total" in metric or "systemwide" in metric:
+            df = self._arrays[metric]
+        else:
+            df = self._arrays[metric].xs(region_grp, level="region_grp")
+        df_agg = aggregate(df, sumover)
+
+        if "total" in metric:
+            plots = []
+        else:
+            plots = barchart(df, sumover)
+
+        if self.facet(sumover) == "region":
+            plots.extend(facets2(df_agg, ["region", "technology_grp"]))
+        else:
+            plots.extend(facets1(df_agg, self.facet(sumover)))
+        return plots
+
+    def render(self, plots: List, ncols: int = 3, **kwopts):
+        return (
+            hv.Layout(plots)
+            .opts(shared_axes=False, toolbar="right", **kwopts)
+            .cols(ncols)
+        )
 
     def write(self, plotdir: str):
         """Write all plots to a directory
@@ -235,20 +265,72 @@ class plotmanager:
         for metric in pbar1:
             pbar1.set_description(f"{metric}")
             if "total" in metric or "systemwide" in metric:
-                hv.save(self.agg_plot(metric, "", ""), f"{plotdir}/{metric}.html")
+                plot = self.render(self.agg(metric, "", ""))
+                hv.save(plot, f"{plotdir}/{metric}.html")
             elif metric in self._data.derived:
                 if metric == "capacity_factor":
-                    for groupby in ("region", "technology"):
-                        plot = self.agg_capacity_factor(groupby)
-                        hv.save(plot, f"{plotdir}/{metric}_{groupby}.html")
+                    for sumover in ("region", "technology"):
+                        plot = self.render(self.agg_capacity_factor(sumover))
+                        hv.save(plot, f"{plotdir}/{metric}_{sumover}.html")
                 elif metric == "carrier_prod_share":
-                    plot = self.agg_carrier_prod_share()
+                    plot = self.render(self.agg_carrier_prod_share())
                     hv.save(plot, f"{plotdir}/{metric}.html")
                 else:
                     RuntimeError("don't know how it got here")
             else:
                 pbar2 = tqdm(rgroups)
-                for region, stack in product(pbar2, ("region", "technology")):
-                    pbar2.set_description(f"{region=}")
-                    plots = self.agg_plot(metric, region, stack)
-                    hv.save(plots, f"{plotdir}/{metric}_{region}_{stack}.html")
+                for lvl, grp in product(("region", "technology"), pbar2):
+                    pbar2.set_description(f"{grp=}")
+                    plot = self.render(self.agg(metric, lvl, grp))
+                    hv.save(plot, f"{plotdir}/{metric}_{grp}_{lvl}.html")
+
+        for _scenarios in (
+            ["heating", "EV"],
+            ["PV", "battery"],
+            ["demand", "cost", "all"],
+        ):
+            tag = "_".join(_scenarios)
+            delta_plots = self.regionwise_bands(_scenarios)
+            hv.save(
+                self.render(delta_plots, ncols=2),
+                f"{plotdir}/scenario_group_delta_{tag}.html",
+            )
+
+
+def scenario_heatmap(arr: pd.Series, facetx, scenariox, scenarioy, write: str = ""):
+    name = arr.name
+    df = arr.reset_index(facetx)
+    grid = sns.FacetGrid(df, col=facetx)
+    fig = grid.map_dataframe(
+        lambda *args, **kwargs: sns.heatmap(
+            kwargs.pop("data")[name].unstack(scenariox),
+        ),
+        scenariox,
+        scenarioy,
+    )
+    if write:
+        fig.savefig(write)
+    return fig
+
+
+def baseline_scatter(df: pd.DataFrame, nregions: int = 10):
+    df = df.head(nregions)
+    dims = [
+        {
+            "vdims": ["production", "region", "import", "export"],
+            "kdims": "demand",
+        },
+        {
+            "vdims": ["import", "region", "production", "export"],
+            "kdims": "demand",
+        },
+        {
+            "vdims": ["export", "import", "region", "demand"],
+            "kdims": "production",
+        },
+    ]
+    scatter_plots = [
+        hv.Scatter(df.reset_index(), **_dim).opts(tools=["hover"], width=400)
+        for _dim in dims
+    ]
+    return scatter_plots
