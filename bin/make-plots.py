@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
     _input = Path(opts.input)
     if _input.is_dir():
-        mgr = plotmanager.from_netcdf(str(_input), "out_scenario*.nc", pretty=False)
+        mgr = plotmanager.from_netcdf(str(_input), "out_scenario*.nc")
     else:
         mgr = plotmanager.from_hdf5(str(_input))
     mgr.write(opts.output)
