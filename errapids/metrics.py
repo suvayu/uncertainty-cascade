@@ -295,7 +295,7 @@ def _ratio(num: DF_or_Series_t, den: pd.Series, *, scale: int) -> DF_or_Series_t
         return num.div(scale).div(den).dropna()
 
 
-def ratio_groupby(
+def ratio_sum(
     num: DF_or_Series_t,
     den: pd.Series,
     lvl: str,
@@ -303,11 +303,11 @@ def ratio_groupby(
     scale: int,
 ) -> DF_or_Series_t:
     """Calculate the ratio of two metrics summing over a given level"""
-    common = set(num.index.names).intersection(den.index.names)
-    lvls = [i for i in num.index.names if i in common]
-    lvls.pop(lvls.index(lvl))
-    if (lvl not in num.index.names) or (lvl not in den.index.names):
+    # not using set to preserve order
+    lvls = [i for i in num.index.names if i in den.index.names]
+    if lvl not in lvls:
         raise ValueError(f"{lvl=}: not in index, cannot sum")
+    lvls.pop(lvls.index(lvl))
 
     # sum over any deeper levels
     num = num.groupby(level=lvls).sum()
@@ -315,14 +315,14 @@ def ratio_groupby(
     return _ratio(num, den, scale=scale)
 
 
-def pan_eu_cf(prod, cap, groupby: str) -> pd.DataFrame:
+def pan_eu_cf(prod, cap, sumover: str) -> pd.DataFrame:
     lvls = {"region", "technology"}
-    if groupby not in lvls:
-        raise ValueError(f"{groupby}: unknow level")
-    tosum, *_ = lvls - {groupby}
+    if sumover not in lvls:
+        raise ValueError(f"{sumover}: unknow level")
+    other = (lvls - {sumover}).pop()
     prod = notrans(prod)
     cap = notrans(cap)
-    cf = ratio_groupby(prod, cap, tosum, scale=3).rename(f"capacity_factor_{groupby}")
+    cf = ratio_sum(prod, cap, sumover, scale=3).rename(f"capacity_factor_{other}")
     return scenario_deltas(cf)
 
 
