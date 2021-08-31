@@ -80,6 +80,12 @@ class HDF5Reader:
         self.store = pd.HDFStore(path)
         self.metrics = [k.split("/")[-1] for k in self.store.keys() if "metric" in k]
 
+    def __repr__(self):
+        return repr(self.store)
+
+    def __del__(self):  # FIXME: doesn't work
+        self.store.close()
+
     def paths(self, filter_token: str):
         return [k for k in self.store.keys() if filter_token in k]
 
@@ -91,3 +97,6 @@ class HDF5Reader:
 
     def delta(self, key: str):
         return self.store.get(f"deltas/{key}")
+
+    def ts(self, key: str):
+        return self.store.get(f"ts/{key}_ts")
