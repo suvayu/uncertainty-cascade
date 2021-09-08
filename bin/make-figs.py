@@ -4,14 +4,11 @@ from itertools import product
 from pathlib import Path
 import sys
 
-import holoviews as hv
 import pandas as pd
 
-from errapids.err import scenario_slice, sorted_join
+from errapids.err import scenario_slice
 from errapids.io import HDF5Reader
-from errapids.viz import baseline_scatter, scenario_heatmap
-
-hv.extension("bokeh")
+from errapids.viz import scenario_heatmap
 
 ix = pd.IndexSlice
 parser = ArgumentParser()
@@ -29,18 +26,25 @@ if __name__ == "__main__":
     if not plotdir.is_dir():
         sys.exit(f"{plotdir!r} is not a directory")
 
+    countries = "GBR DEU ESP ITA FRA PRT DNK NOR".split()
+
     reader = HDF5Reader(_input)
-    con = reader["carrier_con"].droplevel("carrier")
-    prod = reader["carrier_prod"].droplevel("carrier")
+    plots = list(
+        product(["carrier_con", "carrier_prod"], "cost demand".split(), [False, True])
+    )
+    plots.extend(
+        [
+            ("resource_cap", "demand", False),
+            ("resource_area", "demand", False),
+            ("energy_cap", "demand", False),
+            ("energy_cap", "cost", False),
+        ]
+    )
 
-    plots = hv.Layout(baseline_scatter(sorted_join(con, prod)))
-    hv.save(plots, f"{plotdir}/demand_production_scatter.html")
-
-    countries = "GBR DEU ESP FRA NOR".split()
-
-    for arr, scenario, trans in product(
-        [con, prod], "cost demand".split(), [False, True]
-    ):
+    for metric, scenario, trans in plots:
+        arr = reader[metric]
+        if "carrier" in arr.index.names:
+            arr = arr.droplevel("carrier")
         var = scenario_slice(arr, scenario, countries, trans)
 
         if scenario == "demand":
@@ -60,13 +64,19 @@ if __name__ == "__main__":
         else:
             tag = ""
 
-        fname = f"{opts.output}/{arr.name}_{scenario}{tag}.png"
-        print(f"Writing {fname}")
-        grid = scenario_heatmap(var, "region", *_scenarios, write=fname)
-        grid.fig.suptitle(f"{arr.name} - {scenario}{tag.replace('_', ' - ')}", y=0.999)
-        grid.savefig(fname)
+        fname = f"{opts.output}/{arr.name}_{scenario}{tag}"
+        title = f"{arr.name} - {scenario}{tag.replace('_', ' - ')}"
+        print(f"Writing {fname}*.{{png,csv}}")
+
+        grid = scenario_heatmap(var.loc[ix[:, :, countries[:4]]], "region", *_scenarios)
+        grid.fig.suptitle(title, y=0.999)
+        grid.savefig(f"{fname}-1.png")
+
+        grid = scenario_heatmap(var.loc[ix[:, :, countries[4:]]], "region", *_scenarios)
+        grid.fig.suptitle(title, y=0.999)
+        grid.savefig(f"{fname}-2.png")
 
         for c in countries:
-            _fname = fname.replace(".png", f"_{c}.csv")
+            _fname = f"{fname}_{c}.csv"
             print(f"Writing {_fname}")
             var.xs(c, level="region").unstack(0).to_csv(_fname)
