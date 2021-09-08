@@ -362,20 +362,29 @@ def scenario_slice(
     return var
 
 
-def sorted_join(con: pd.Series, prod: pd.Series) -> pd.DataFrame:
-    con1 = (
-        con.pipe(scenario_deltas)
-        .pipe(aggregate2, "technology", "prod")
-        .pipe(sort_by_col, "all")
+def sorted_join(
+    con: pd.Series, prod: pd.Series, sort_first: bool = True
+) -> pd.DataFrame:
+    def delta_by_region(df):
+        return df.pipe(scenario_deltas).pipe(aggregate2, "technology", "prod")
+
+    def delta_by_region_trans(df):
+        return df.pipe(scenario_deltas, istransmission=True).pipe(
+            aggregate2, "technology", trans=True
+        )
+
+    con1 = delta_by_region(con)
+    con2 = delta_by_region_trans(con)  # export
+    prod1 = delta_by_region(prod)
+    prod2 = delta_by_region_trans(prod)  # import
+
+    regions = (
+        sort_by_col(con1 if sort_first else prod1, "all")
+        .loc[ix[:, "all"], :]
+        .droplevel("scenario")
+        .index
     )
-    con2 = con.pipe(scenario_deltas, istransmission=True).pipe(
-        aggregate2, "technology", trans=True
-    )  # export
-    prod1 = prod.pipe(scenario_deltas).pipe(aggregate2, "technology", "prod")
-    prod2 = prod.pipe(scenario_deltas, istransmission=True).pipe(
-        aggregate2, "technology", trans=True
-    )  # import
-    regions = con1.loc[ix[:, "all"], :].droplevel("scenario").index
+
     df_joined = (
         pd.concat(
             [

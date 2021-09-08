@@ -14,6 +14,7 @@ from errapids.err import add_groups
 from errapids.err import aggregate
 from errapids.err import rgroups
 from errapids.err import scenario_deltas
+from errapids.err import sort_by_col
 from errapids.metrics import ScenarioGroups, pan_eu_cf, pan_eu_prod_share
 
 ix = pd.IndexSlice
@@ -297,20 +298,24 @@ class plotmanager:
             )
 
 
-def scenario_heatmap(arr: pd.Series, facetx, scenariox, scenarioy, write: str = ""):
+def scenario_heatmap(
+    arr: pd.Series, facetx, scenariox, scenarioy, title: str = "", write: str = ""
+):
     name = arr.name
     df = arr.reset_index(facetx)
     grid = sns.FacetGrid(df, col=facetx)
-    fig = grid.map_dataframe(
+    grid.map_dataframe(
         lambda *args, **kwargs: sns.heatmap(
             kwargs.pop("data")[name].unstack(scenariox),
         ),
         scenariox,
         scenarioy,
     )
+    if title:
+        grid.fig.suptitle(title)
     if write:
-        fig.savefig(write)
-    return fig
+        grid.savefig(write)
+    return grid
 
 
 def baseline_scatter(df: pd.DataFrame, nregions: int = 10):
