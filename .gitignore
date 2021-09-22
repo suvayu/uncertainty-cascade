@@ -1,5 +1,7 @@
 *~
 \#*\#
+*.bak
+.*
 .vscode
 
 # byte-compiled files
@@ -18,11 +20,14 @@ build
 *.yaml
 *.log
 *.txt
+*.diff
+*.patch
 
 # reports
 *.html
 *.js
 *.css
+*.doc*
 
 .coverage
 .hypothesis
@@ -37,6 +42,15 @@ build
 *.gz
 *.bz
 *.xz
+
+# notebook
+*.ipynb
+
+# data
+*.nc
+*.h5
+*.csv
+data/*
 
 # scratch directories
 dsts
