@@ -22,6 +22,31 @@ _flevel_aliases = {
 }
 
 
+def qual_name(name: str, trans: bool = False) -> str:
+    name = (
+        name.replace("carrier", "electricity")
+        .replace("_con", "_consumption")
+        .replace("_prod", "_production")
+        .replace("var", "variable")
+        .replace("_cap", "_capacity")
+        .replace("_", " ")
+    )
+    if trans:
+        if "consumption" in name:
+            name = name.replace("electricity", "imported")
+        elif "production" in name:
+            name = name.replace("electricity", "exported")
+    if "cost" in name:
+        name = f"{name} (bn EUR)"
+    elif "capacity" in name or "storage" in name:
+        name = f"{name} (100 GW)"
+    elif "consumption" in name or "production" in name:
+        name = f"{name} (100 GWh)"
+    elif "area" in name:
+        name = f"{name} (10k km²)"
+    return name
+
+
 def decode_fname(fname: str) -> Tuple[str, str]:
     tokens = fname.lower().split("_")
 

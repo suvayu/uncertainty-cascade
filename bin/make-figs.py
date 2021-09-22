@@ -4,12 +4,16 @@ from itertools import product
 from pathlib import Path
 import sys
 
+import holoviews as hv
+import matplotlib.pyplot as plt
 import pandas as pd
 
 from errapids.err import scenario_slice
 from errapids.io import HDF5Reader
+from errapids.metrics import qual_name
 from errapids.viz import scenario_heatmap
 
+hv.extension("matplotlib")
 ix = pd.IndexSlice
 parser = ArgumentParser()
 parser.add_argument("-i", "--input", help="HDF5 file with dataframes")
@@ -34,7 +38,6 @@ if __name__ == "__main__":
     )
     plots.extend(
         [
-            ("resource_cap", "demand", False),
             ("resource_area", "demand", False),
             ("energy_cap", "demand", False),
             ("energy_cap", "cost", False),
@@ -42,7 +45,10 @@ if __name__ == "__main__":
     )
 
     for metric, scenario, trans in plots:
-        arr = reader[metric]
+        if "carrier_con" == metric:
+            arr = -reader[metric]
+        else:
+            arr = reader[metric]
         if "carrier" in arr.index.names:
             arr = arr.droplevel("carrier")
         var = scenario_slice(arr, scenario, countries, trans)
@@ -65,7 +71,7 @@ if __name__ == "__main__":
             tag = ""
 
         fname = f"{opts.output}/{arr.name}_{scenario}{tag}"
-        title = f"{arr.name} - {scenario}{tag.replace('_', ' - ')}"
+        title = f"{qual_name(arr.name)} - {scenario}{tag.replace('_', ' - ')}"
         print(f"Writing {fname}*.{{png,csv}}")
 
         grid = scenario_heatmap(var.loc[ix[:, :, countries[:4]]], "region", *_scenarios)
@@ -75,8 +81,4 @@ if __name__ == "__main__":
         grid = scenario_heatmap(var.loc[ix[:, :, countries[4:]]], "region", *_scenarios)
         grid.fig.suptitle(title, y=0.999)
         grid.savefig(f"{fname}-2.png")
-
-        for c in countries:
-            _fname = f"{fname}_{c}.csv"
-            print(f"Writing {_fname}")
-            var.xs(c, level="region").unstack(0).to_csv(_fname)
+        plt.close(grid.fig)

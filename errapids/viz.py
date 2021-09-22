@@ -1,4 +1,3 @@
-from errapids.io import HDF5Reader
 from itertools import product
 from typing import List, Tuple
 
@@ -15,13 +14,21 @@ from errapids.err import aggregate
 from errapids.err import rgroups
 from errapids.err import scenario_deltas
 from errapids.err import sort_by_col
-from errapids.metrics import ScenarioGroups, pan_eu_cf, pan_eu_prod_share
+from errapids.err import baselines
+from errapids.io import HDF5Reader
+from errapids.metrics import qual_name, ScenarioGroups, pan_eu_cf, pan_eu_prod_share
+from errapids.tseries import connections, energy, smooth
 
 ix = pd.IndexSlice
 
 
 def facets1(df: pd.DataFrame, facet: str):
-    opts = {"width": 400, "height": 300, "tools": ["hover"]}
+    opts = {
+        "ylabel": qual_name(df.columns[0]),
+        "width": 400,
+        "height": 300,
+        "tools": ["hover"],
+    }
     if facet == "region":
         _title = lambda k: countries.lookup(k).name
     else:
@@ -48,7 +55,12 @@ def facets1(df: pd.DataFrame, facet: str):
 def facets2(df: pd.DataFrame, facets: List[str]):
     assert len(facets) == 2
 
-    opts = {"width": 400, "height": 300, "tools": ["hover"]}
+    opts = {
+        "ylabel": qual_name(df.columns[0]),
+        "width": 400,
+        "height": 300,
+        "tools": ["hover"],
+    }
     if "region" in facets:
         _title = lambda k: countries.lookup(k).name
     else:
@@ -81,6 +93,7 @@ def get_ylimits(df: pd.DataFrame) -> Tuple[float, float]:
 def barchart(df: pd.DataFrame, sumover: str):
     name = df.columns[0]
     opts = {
+        "ylabel": qual_name(name),
         "width": 400,
         "height": 300,
         "stacked": True,
@@ -144,9 +157,17 @@ class plotmanager:
         self._arrays = {}
         self._trans = {}
         for name in self._data.metrics:
-            if name in self._data.derived or name == "cost_var":
+            if any(
+                map(
+                    lambda i: i in name,
+                    ["cost_var", "resource_cap", "resource_con", *self._data.derived],
+                )
+            ):
                 continue
-            df = self._data[name]
+            if name == "carrier_con":
+                df = -self._data[name]
+            else:
+                df = self._data[name]
             self._arrays[name] = scenario_deltas(df, False)
             if "total" in name or "system" in name:
                 # no facet over region => no need for region or technology groups
@@ -196,7 +217,11 @@ class plotmanager:
             if "system" in metric or "total" in metric:
                 continue
             if transmission:
+                if metric not in ("carrier_con", "carrier_prod"):
+                    continue
                 _df = aggregate(df, "technology", trans=True).loc[ix[:, scenarios], :]
+                if _df.empty:
+                    continue
             else:
                 _df = (
                     aggregate(df, "technology")
@@ -216,7 +241,11 @@ class plotmanager:
                         for lvl in _df.index.levels[-1]
                     },
                     kdims="scenarios",
-                ).opts(width=500, height=300)
+                ).opts(
+                    ylabel=qual_name(_df.columns[0], trans=transmission),
+                    width=500,
+                    height=300,
+                )
                 * hv.Curve(
                     _df.xs(scenarios[0], level="scenario").head(10),
                     vdims=_df.columns[0],
@@ -296,6 +325,11 @@ class plotmanager:
                 self.render(delta_plots, ncols=2),
                 f"{plotdir}/scenario_group_delta_{tag}.html",
             )
+            delta_plots = self.regionwise_bands(_scenarios, transmission=True)
+            hv.save(
+                self.render(delta_plots, ncols=2),
+                f"{plotdir}/scenario_group_delta_{tag}_transmission.html",
+            )
 
 
 def scenario_heatmap(
@@ -339,3 +373,56 @@ def baseline_scatter(df: pd.DataFrame, nregions: int = 10):
         for _dim in dims
     ]
     return scatter_plots
+
+
+class trendmanager:
+    def __init__(self, con: pd.DataFrame, prod: pd.DataFrame, within: List[str]):
+        self.lvls = [l for l in baselines.values() if not isinstance(l, list)]
+        self.idx = ix[(*self.lvls, slice(None))]
+        self.within = within
+        self.con = -con
+        self.prod = prod
+        self.demand = energy(con, self.idx, trans=False)
+        self.generated = energy(prod, self.idx, trans=False)
+
+    def legend(self, export: bool, split: bool = False):
+        if split:
+            return "exported to" if export else "imported from"
+        else:
+            return "exported" if export else "imported"
+
+    def transmission(self, export: bool, raw: bool):
+        df = self.con if export else self.prod
+        if not raw:
+            return energy(df, self.idx, trans=True)
+        return df
+
+    def plot(self, region: str, export: bool):
+        links = connections(self.transmission(export, raw=True).loc[self.idx], region)
+        ts = {
+            ("demand", region): smooth(self.demand, 7, region),
+            ("generated", region): smooth(self.generated, 7, region),
+            (self.legend(export), region): smooth(
+                self.transmission(export, raw=False), 7, region
+            ),
+            **{
+                (self.legend(export, split=True), r): smooth(
+                    self.transmission(export, raw=True).loc[
+                        ix[(*self.lvls, region, f"ac_transmission:{r}")]
+                    ],
+                    7,
+                ).rename("electricity")
+                for r in links[:3]
+                if r in self.within
+            },
+        }
+
+        trend = hv.NdOverlay(
+            {k: hv.Curve(v).opts(tools=["hover"]) for k, v in ts.items()},
+            kdims=["electricity", "country"],
+        ).opts(
+            width=800,
+            height=400,
+            title=f"{region}: Electricity demand, generation, & {self.legend(export)[:-2]}",
+        )
+        return trend

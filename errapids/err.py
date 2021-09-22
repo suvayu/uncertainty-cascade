@@ -214,9 +214,10 @@ def sum_n_slice(arr: DFSeries_t, idx, trans: bool = False):
 def sort_by_col(df: pd.DataFrame, scenario: str) -> pd.DataFrame:
     """Sort by the first column for the given `scenario`"""
     is_neg = df.iloc[:, 0].mean() < 0
-    regions = (
-        df.xs(scenario, level="scenario").iloc[:, 0].sort_values(ascending=is_neg).index
+    df_sorted = (
+        df.xs(scenario, level="scenario").iloc[:, 0].sort_values(ascending=is_neg)
     )
+    regions = df_sorted.index
     df = df.reindex(index=regions, level="region")
     df.index = df.index.remove_unused_levels()
     return df
