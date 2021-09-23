@@ -31,11 +31,6 @@ def qual_name(name: str, trans: bool = False) -> str:
         .replace("_cap", "_capacity")
         .replace("_", " ")
     )
-    if trans:
-        if "consumption" in name:
-            name = name.replace("electricity", "imported")
-        elif "production" in name:
-            name = name.replace("electricity", "exported")
     if "cost" in name:
         name = f"{name} (bn EUR)"
     elif "capacity" in name or "storage" in name:
@@ -44,6 +39,9 @@ def qual_name(name: str, trans: bool = False) -> str:
         name = f"{name} (100 GWh)"
     elif "area" in name:
         name = f"{name} (10k km²)"
+
+    if trans:
+        name = name.replace("consumption", "export").replace("production", "import")
     return name
 
 

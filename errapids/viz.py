@@ -398,6 +398,7 @@ class trendmanager:
         return df
 
     def plot(self, region: str, export: bool):
+        """Plot time series for `region`, include export/import"""
         links = connections(self.transmission(export, raw=True).loc[self.idx], region)
         ts = {
             ("demand", region): smooth(self.demand, 7, region),
