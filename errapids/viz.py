@@ -376,14 +376,33 @@ def baseline_scatter(df: pd.DataFrame, nregions: int = 10):
 
 
 class trendmanager:
-    def __init__(self, con: pd.DataFrame, prod: pd.DataFrame, within: List[str]):
-        self.lvls = [l for l in baselines.values() if not isinstance(l, list)]
-        self.idx = ix[(*self.lvls, slice(None))]
-        self.within = within
+    def __init__(
+        self, con: pd.DataFrame, prod: pd.DataFrame, within: List[str], lvls=None
+    ):
         self.con = -con
         self.prod = prod
-        self.demand = energy(con, self.idx, trans=False)
-        self.generated = energy(prod, self.idx, trans=False)
+        self.within = within
+        if lvls:
+            self.lvls = lvls
+        else:
+            self.lvls = [l for l in baselines.values() if not isinstance(l, list)]
+
+    @property
+    def lvls(self):
+        return self._lvls
+
+    @lvls.setter
+    def lvls(self, _lvls):
+        self._lvls = _lvls
+        self._update()
+
+    @property
+    def idx(self):
+        return ix[(*self.lvls, slice(None))]
+
+    def _update(self):
+        self.demand = energy(self.con, self.idx, trans=False)
+        self.generated = energy(self.prod, self.idx, trans=False)
 
     def legend(self, export: bool, split: bool = False):
         if split:
@@ -399,19 +418,20 @@ class trendmanager:
 
     def plot(self, region: str, export: bool):
         """Plot time series for `region`, include export/import"""
+        days = 7  # days to smooth
         links = connections(self.transmission(export, raw=True).loc[self.idx], region)
         ts = {
-            ("demand", region): smooth(self.demand, 7, region),
-            ("generated", region): smooth(self.generated, 7, region),
+            ("demand", region): smooth(self.demand, days, region),
+            ("generated", region): smooth(self.generated, days, region),
             (self.legend(export), region): smooth(
-                self.transmission(export, raw=False), 7, region
+                self.transmission(export, raw=False), days, region
             ),
             **{
                 (self.legend(export, split=True), r): smooth(
                     self.transmission(export, raw=True).loc[
                         ix[(*self.lvls, region, f"ac_transmission:{r}")]
                     ],
-                    7,
+                    days,
                 ).rename("electricity")
                 for r in links[:3]
                 if r in self.within

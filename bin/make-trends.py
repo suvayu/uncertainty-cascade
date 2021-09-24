@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser
+from collections import defaultdict
 from itertools import product
 from pathlib import Path
 import sys
@@ -7,6 +8,7 @@ import sys
 import holoviews as hv
 from tqdm import tqdm
 
+from errapids.err import baselines, demand_lvls
 from errapids.io import HDF5Reader
 from errapids.viz import trendmanager
 
@@ -31,9 +33,25 @@ if __name__ == "__main__":
     prod = reader.ts("carrier_prod").droplevel("carrier")
     countries = "GBR DEU ESP ITA FRA PRT DNK NOR".split()
 
+    pbar = tqdm(demand_lvls)
+    plots = defaultdict(list)
     mgr = trendmanager(con, prod, within=countries)
-    pbar = tqdm(product(countries, (True, False)))
-    for region, export in pbar:
-        pbar.set_description(f"{region},{export=}")
-        plot = mgr.plot(region, export=export)
-        hv.save(plot, f"{plotdir}/electricity_{region}_{mgr.legend(export)}.html")
+    for val in pbar:
+        pbar.set_description(f"EV={val}")
+        lvls = [
+            val if l == "EV" else v
+            for l, v in baselines.items()
+            if not isinstance(v, list)
+        ]
+        mgr.lvls = lvls
+        for region, export in product(countries, (True, False)):
+            key = (region, export)
+            plot = mgr.plot(region, export=export)
+            plots[key].append(
+                plot.opts(title=plot.opts.get().kwargs["title"] + f"(EV={val})")
+            )
+    for (region, export), plot in plots.items():
+        hv.save(
+            hv.Layout(plot).cols(1),
+            f"{plotdir}/electricity_{region}_{mgr.legend(export)}_EV.html",
+        )
