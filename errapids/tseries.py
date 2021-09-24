@@ -17,7 +17,8 @@ def connections(df: pd.DataFrame, region: str) -> List[str]:
     df_io = notrans(df, invert=False)  # import/export
     if (df_io < 0).any().any():
         df_io = -df_io
-    lvls = [l for l in baselines.values() if not isinstance(l, list)]
+    # it's expected that only a fixed scenario combination will be passed
+    lvls = df_io.index[0][:4]
     regions = (
         df_io.loc[ix[(*lvls, region, slice(None))]]
         .mean(axis=1)
@@ -34,9 +35,9 @@ def connections(df: pd.DataFrame, region: str) -> List[str]:
 def smooth(df: pd.DataFrame, days: int, idx=None) -> pd.DataFrame:
     """Time series has 3 hour resolution"""
     if idx:
-        return df.loc[idx].rolling(8 * days).mean()
+        return df.loc[idx].rolling(int(8 * days)).mean()
     else:
-        return df.rolling(8 * days).mean()
+        return df.rolling(int(8 * days)).mean()
 
 
 def energy(df: pd.DataFrame, idx, trans: bool) -> pd.DataFrame:
