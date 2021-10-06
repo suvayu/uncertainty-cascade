@@ -126,6 +126,15 @@ def lvl_filter(
 notrans = partial(lvl_filter, lvl="technology", token="ac_transmission")
 
 
+def ensure_pve(arr: DFSeries_t) -> DFSeries_t:
+    if arr.ndim == 1:
+        return -arr if (arr < 0).any() else arr
+    elif arr.ndim == 2:
+        return -arr if (arr < 0).any().any() else arr
+    else:
+        raise ValueError(f"array dimension {arr.ndim} > 2")
+
+
 def add_groups(arr: DFSeries_t, atlvl: str) -> DFSeries_t:
     if atlvl not in ("technology", "region"):
         raise ValueError(f"{atlvl}: unsupported level")
