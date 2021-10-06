@@ -144,12 +144,13 @@ def add_groups(arr: DFSeries_t, atlvl: str) -> DFSeries_t:
 
     rmap = {v: k for k, _v in groupmap.items() for v in _v}
     idx = arr.index.to_frame()
-    idx.insert(
-        arr.index.names.index(atlvl),
-        newlvl,
-        arr.index.get_level_values(atlvl).map(rmap),
-    )
-    arr.index = pd.MultiIndex.from_frame(idx)
+    if newlvl not in idx.columns:
+        idx.insert(
+            arr.index.names.index(atlvl),
+            newlvl,
+            arr.index.get_level_values(atlvl).map(rmap),
+        )
+        arr.index = pd.MultiIndex.from_frame(idx)
     return arr
 
 
