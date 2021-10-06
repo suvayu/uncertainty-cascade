@@ -410,3 +410,54 @@ def sorted_join(
         .reindex(regions)
     )
     return df_joined
+
+
+def sum_(
+    df: DFSeries_t, level: str, grp: Union[bool, str], trans: bool = False
+) -> DFSeries_t:
+    """Sum over levels upto an including `level`.
+
+    Introduce `{level}_grp`, if `grp` evaluates to `True`.  If `grp` is a
+    non-empty string, then return only that group (in this case, the
+    `{level}_grp` is absent in the returned dataframe).
+
+    When `level` is `technology`, `grp` cannot be `False` (enforced).
+
+    If `trans` is `True`, do the same with transmitted energy; `level` has to
+    be `technology` in this case (enforced), and `grp` is ignored.
+
+    """
+    assert level in ("technology", "region"), f"{level}: unsupported level"
+    if trans:
+        if level != "technology":
+            raise ValueError(f"{trans=}: incompatible with {level=}")
+        df = notrans(df, invert=False)
+        grp = False  # no groups assigned
+    else:
+        if level == "technology":
+            grp = grp if grp else True  # can't be False when level is technology
+        if "technology" in df.index.names:
+            df = notrans(df)
+    if grp:
+        df = add_groups(df, level)
+    else:
+        if f"{level}_grp" in df.index.names:
+            df.reset_index(f"{level}_grp", drop=True, inplace=True)
+    df = df.groupby(df.index.names.difference([level])).sum()
+    if grp and isinstance(grp, str):
+        return df.xs(grp, level=f"{level}_grp")
+    return df
+
+
+def sum_all(
+    df: DFSeries_t, technology_grp: str, region_grp: Union[bool, str]
+) -> DFSeries_t:
+    """Sum over technologies, and Europe/region groups
+
+    Only one technology group is considered (default: production)
+
+    """
+    df = ensure_pve(df)
+    df = sum_(df, "technology", technology_grp)
+    df = sum_(df, "region", region_grp)
+    return df
