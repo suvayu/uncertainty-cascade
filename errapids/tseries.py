@@ -1,8 +1,9 @@
-from typing import List
+from typing import List, Union, cast
 
+import numpy as np
 import pandas as pd
 
-from errapids.err import baselines, notrans, _prep_agg
+from errapids.err import DFSeries_t, notrans, _prep_agg, ensure_pve, sum_
 
 ix = pd.IndexSlice
 
@@ -13,7 +14,6 @@ def connections(df: pd.DataFrame, region: str) -> List[str]:
     It's sorted in descending order.
 
     """
-    # print(df)
     df_io = notrans(df, invert=False)  # import/export
     if (df_io < 0).any().any():
         df_io = -df_io
@@ -32,7 +32,7 @@ def connections(df: pd.DataFrame, region: str) -> List[str]:
     return regions
 
 
-def smooth(df: pd.DataFrame, days: int, idx=None) -> pd.DataFrame:
+def smooth(df: DFSeries_t, days: Union[int, float], idx=None) -> DFSeries_t:
     """Time series has 3 hour resolution"""
     if idx:
         return df.loc[idx].rolling(int(8 * days)).mean()
@@ -42,11 +42,11 @@ def smooth(df: pd.DataFrame, days: int, idx=None) -> pd.DataFrame:
 
 def energy(df: pd.DataFrame, idx, trans: bool) -> pd.DataFrame:
     """Return energy demand/production or import/export time series"""
-    if trans:
-        name, df = _prep_agg(df.loc[idx], "technology", trans=trans)
-    else:
-        name, df = _prep_agg(df.loc[idx], "technology", restrict="prod")
+    df = ensure_pve(df)
+    df = sum_(df.loc[idx], "technology", "prod", trans)
+    return df
 
-    if (df < 0).any().any():
-        df = -df
-    return df.groupby("region").sum()
+
+def daily_summary(df: pd.DataFrame) -> pd.DataFrame:
+    """Daily mean & avg of time-series"""
+    return df.T.groupby(df.columns.date).agg([np.mean, np.var]).T
