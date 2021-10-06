@@ -1,6 +1,7 @@
 from itertools import chain
 from pathlib import Path
-from typing import Iterable, Dict, Literal, Tuple, Union, overload
+from textwrap import indent
+from typing import Iterable, Dict, Literal, List, Tuple, Union, overload
 
 from glom import glom, Iter
 import numpy as np
@@ -9,17 +10,23 @@ import xarray as xr
 
 from friendly_data.helpers import noop_map
 
-from errapids.err import notrans, scenario_deltas
+from errapids.err import baselines
+from errapids.err import _isgrouped
+from errapids.err import notrans
+from errapids.err import scenario_deltas
+from errapids.err import DFSeries_t
+from errapids.err import sum_all
 from errapids.io import _path_t
 from errapids.ons import pv_batt_lvls
-
-DF_or_Series_t = Union[pd.Series, pd.DataFrame]
+from errapids.tseries import daily_summary
 
 _flevel_aliases = {
     "high": ["high", "hi"],
     "mid": ["mid", "medium"],
     "low": ["low", "lo"],
 }
+
+ix = pd.IndexSlice
 
 
 def qual_name(name: str, trans: bool = False) -> str:
@@ -35,7 +42,7 @@ def qual_name(name: str, trans: bool = False) -> str:
         name = f"{name} (bn EUR)"
     elif "capacity" in name or "storage" in name:
         name = f"{name} (100 GW)"
-    elif "consumption" in name or "production" in name:
+    elif any(map(lambda i: i in name, ("consumption", "production", "electricity"))):
         name = f"{name} (100 GWh)"
     elif "area" in name:
         name = f"{name} (10k km²)"
@@ -310,7 +317,7 @@ def technology_share(arr: pd.Series) -> pd.Series:
     return numerator / denominator
 
 
-def _ratio(num: DF_or_Series_t, den: pd.Series, *, scale: int) -> DF_or_Series_t:
+def _ratio(num: DFSeries_t, den: pd.Series, *, scale: int) -> DFSeries_t:
     num, den = num.align(den, join="inner", axis=0)
     if num.ndim > 1:
         return num.div(scale).div(den, axis=0).dropna()
@@ -319,12 +326,12 @@ def _ratio(num: DF_or_Series_t, den: pd.Series, *, scale: int) -> DF_or_Series_t
 
 
 def ratio_sum(
-    num: DF_or_Series_t,
+    num: DFSeries_t,
     den: pd.Series,
     lvl: str,
     *,
     scale: int,
-) -> DF_or_Series_t:
+) -> DFSeries_t:
     """Calculate the ratio of two metrics summing over a given level"""
     # not using set to preserve order
     lvls = [i for i in num.index.names if i in den.index.names]
@@ -357,3 +364,48 @@ def pan_eu_prod_share(arr: pd.Series) -> pd.DataFrame:
     lvls[ridx], lvls[tidx] = lvls[tidx], lvls[ridx]
     arr = technology_share(arr.reorder_levels(lvls))
     return scenario_deltas(arr.rename("carrier_prod_share_all"))
+
+
+def pan_eu_sum(
+    df: pd.Series, region_grp: bool = False, technology_grp: str = "prod"
+) -> pd.DataFrame:
+    df = sum_all(df, technology_grp, region_grp)
+    return scenario_deltas(df)
+
+
+def pan_eu_sum_ts(
+    df: pd.DataFrame, region_grp: bool = False, technology_grp: str = "prod"
+):
+    df = sum_all(df, technology_grp, region_grp)
+    return daily_summary(df)
+
+
+def agg_scenario(
+    data,
+    scenario: str,
+    technology_grp: str = "prod",
+    region_grp: Union[bool, str] = False,
+    metrics: List[str] = [],
+) -> pd.DataFrame:
+    def _get(arr):
+        if "carrier" in arr.index.names:
+            arr = arr.droplevel("carrier")
+        return sum_all(arr, technology_grp, region_grp)
+
+    if len(metrics) == 0:
+        metrics = ["carrier_con", "carrier_prod", "cost", "energy_cap"]
+
+    base = {k: v for k, v in baselines.items() if not _isgrouped(k)}
+    if _isgrouped(scenario):
+        unpinned = set(base) - set(baselines[scenario])
+        base.update((sc, slice(None)) for sc in unpinned)
+    else:
+        base[scenario] = slice(None)
+
+    idx = ix[tuple(base.values())]
+    df = pd.concat([_get(data[m]).loc[idx] for m in metrics], axis=1)
+
+    df.index = df.index.droplevel(
+        [n for n in df.index.names if len(df.index.get_level_values(n).unique()) == 1]
+    )
+    return df.T
