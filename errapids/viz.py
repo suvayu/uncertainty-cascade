@@ -1,5 +1,6 @@
-from itertools import product
-from typing import List, Tuple
+from collections import defaultdict
+from itertools import product, chain
+from typing import List, Tuple, cast
 
 import numpy as np
 import pandas as pd
@@ -9,17 +10,22 @@ from tqdm import tqdm
 import holoviews as hv
 import seaborn as sns
 
-from errapids.err import add_groups
+from errapids.err import add_groups, sum_
 from errapids.err import aggregate
 from errapids.err import rgroups
 from errapids.err import scenario_deltas
 from errapids.err import sort_by_col
-from errapids.err import baselines
-from errapids.io import HDF5Reader
+from errapids.err import baselines, demand_lvls
+from errapids.io import HDF5Reader, _path_t
 from errapids.metrics import qual_name, ScenarioGroups, pan_eu_cf, pan_eu_prod_share
-from errapids.tseries import connections, energy, smooth
+from errapids.tseries import connections, daily_summary, energy, smooth
 
 ix = pd.IndexSlice
+
+
+def new_title(plot, append: str):
+    """Append to the title of a Holoviews plot"""
+    return plot.opts.get().kwargs["title"] + f" {append}"
 
 
 def facets1(df: pd.DataFrame, facet: str):
@@ -223,10 +229,11 @@ class plotmanager:
                 if _df.empty:
                     continue
             else:
+                tgrp = "storage" if "storage" in metric else "prod"
                 _df = (
                     aggregate(df, "technology")
                     .droplevel(["region_grp"])
-                    .xs("prod", level="technology_grp")
+                    .xs(tgrp, level="technology_grp")
                     .loc[ix[:, scenarios], :]
                 )
             _df = sort_by_col(_df, scenarios[0])
@@ -376,10 +383,12 @@ def baseline_scatter(df: pd.DataFrame, nregions: int = 10):
 
 
 class trendmanager:
+    days = 7  # days to smooth
+
     def __init__(
         self, con: pd.DataFrame, prod: pd.DataFrame, within: List[str], lvls=None
     ):
-        self.con = -con
+        self.con = cast(pd.DataFrame, -con)
         self.prod = prod
         self.within = within
         if lvls:
@@ -400,6 +409,9 @@ class trendmanager:
     def idx(self):
         return ix[(*self.lvls, slice(None))]
 
+    def widx(self, *args):
+        return ix[(*self.lvls, *args)]
+
     def _update(self):
         self.demand = energy(self.con, self.idx, trans=False)
         self.generated = energy(self.prod, self.idx, trans=False)
@@ -413,25 +425,28 @@ class trendmanager:
     def transmission(self, export: bool, raw: bool):
         df = self.con if export else self.prod
         if not raw:
-            return energy(df, self.idx, trans=True)
+            res = energy(df, self.idx, trans=True)
+            return res
         return df
 
     def plot(self, region: str, export: bool):
         """Plot time series for `region`, include export/import"""
-        days = 7  # days to smooth
         links = connections(self.transmission(export, raw=True).loc[self.idx], region)
         ts = {
-            ("demand", region): smooth(self.demand, days, region),
-            ("generated", region): smooth(self.generated, days, region),
+            ("demand", region): smooth(
+                self.demand, self.days, self.widx(region)
+            ).rename("electricity"),
+            ("generated", region): smooth(
+                self.generated, self.days, self.widx(region)
+            ).rename("electricity"),
             (self.legend(export), region): smooth(
-                self.transmission(export, raw=False), days, region
-            ),
+                self.transmission(export, raw=False), self.days, self.widx(region)
+            ).rename("electricity"),
             **{
                 (self.legend(export, split=True), r): smooth(
-                    self.transmission(export, raw=True).loc[
-                        ix[(*self.lvls, region, f"ac_transmission:{r}")]
-                    ],
-                    days,
+                    self.transmission(export, raw=True),
+                    self.days,
+                    self.widx(region, f"ac_transmission:{r}"),
                 ).rename("electricity")
                 for r in links[:3]
                 if r in self.within
@@ -439,11 +454,88 @@ class trendmanager:
         }
 
         trend = hv.NdOverlay(
-            {k: hv.Curve(v).opts(tools=["hover"]) for k, v in ts.items()},
-            kdims=["electricity", "country"],
+            {
+                k: hv.Curve(v).opts(ylabel=qual_name(v.name), tools=["hover"])
+                for k, v in ts.items()
+            },
+            kdims=["electricity type", "country"],
         ).opts(
             width=800,
             height=400,
             title=f"{region}: Electricity demand, generation, & {self.legend(export)[:-2]}",
         )
         return trend
+
+    def plot_var(self, region: str):
+        eu_regions = list(chain(rgroups, ("", "eu", "EU")))
+
+        def _summary(df):
+            if region in rgroups:
+                df = df.pipe(sum_, "region", region)
+            elif region in ("", "eu", "EU"):
+                df = df.pipe(sum_, "region", False)
+
+            df = daily_summary(df)
+            if region not in eu_regions:
+                df = df.xs(region, level="region")
+
+            df = df.T.rolling(self.days).mean().reset_index()
+            df.columns = ["day", "electricity", "variance"]
+            return df
+
+        ts = {k: _summary(getattr(self, k)) for k in ("demand", "generated")}
+
+        trend = hv.NdOverlay(
+            {
+                k: hv.Spread(v).opts(ylabel=qual_name(v.columns[1]))
+                * hv.Curve(v[["day", "electricity"]]).opts(tools=["hover"])
+                for k, v in ts.items()
+            },
+            kdims="electricity",
+        ).opts(
+            width=800,
+            height=400,
+            title=f"{region}: Electricity demand, & generation",
+        )
+        return trend
+
+    def write(self, lvl: str, plotdir: _path_t):
+        plots1 = defaultdict(list)
+        plots2 = defaultdict(list)
+        pbar = tqdm(demand_lvls)
+        for val in pbar:
+            pbar.set_description(f"{lvl}={val}")
+            lvls = [
+                val if l == lvl else v
+                for l, v in baselines.items()
+                if not isinstance(v, list)
+            ]
+            self.lvls = lvls
+            for region, export in product(self.within, (True, False)):
+                key = (region, export)
+                plot = self.plot(region, export=export)
+                plots1[key].append(plot.opts(title=new_title(plot, f"({lvl}={val})")))
+                if export:
+                    plot = self.plot_var(region)
+                    plots2[region].append(
+                        plot.opts(title=new_title(plot, f"({lvl}={val})"))
+                    )
+
+            for region in list(rgroups) + ["EU"]:
+                plot = self.plot_var(region)
+                plots2[region].append(
+                    plot.opts(title=new_title(plot, f"({lvl}={val})"))
+                )
+
+        pbar = tqdm(plots1.items())
+        for (region, export), plot in pbar:
+            pbar.set_description(f"Writing file:{region=},{export=}")
+            hv.save(
+                hv.Layout(plot).cols(1),
+                f"{plotdir}/electricity_{region}_{self.legend(export)}_{lvl}.html",
+            )
+
+        pbar = tqdm(plots2.items())
+        for region, plot in pbar:
+            pbar.set_description(f"Writing file:{region=}")
+            hv.save(hv.Layout(plot).cols(1), f"{plotdir}/elec_var_{region}_{lvl}.html")
