@@ -8,6 +8,7 @@ from pycountry import countries
 from tqdm import tqdm
 
 import holoviews as hv
+from holoviews import opts
 import seaborn as sns
 
 from errapids.err import add_groups, sum_
@@ -482,7 +483,6 @@ class trendmanager:
             return df
 
         ts = {k: _summary(getattr(self, k)) for k in ("demand", "generated")}
-
         trend = hv.NdOverlay(
             {
                 k: hv.Spread(v).opts(ylabel=qual_name(v.columns[1]))
@@ -495,7 +495,9 @@ class trendmanager:
             height=400,
             title=f"{region}: Electricity demand, & generation",
         )
-        return trend
+        # NOTE: can't combine kwd opts with Option objects
+        col_cy = hv.Cycle("Colorblind")
+        return trend.opts(opts.Curve(color=col_cy), opts.Spread(color=col_cy))
 
     def write(self, lvl: str, plotdir: _path_t):
         plots1 = defaultdict(list)
