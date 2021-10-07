@@ -237,27 +237,25 @@ class plotmanager:
                     .loc[ix[:, scenarios], :]
                 )
             _df = sort_by_col(_df, scenarios[0])
-            bands.append(
-                hv.NdOverlay(
-                    {
-                        lvl: hv.Spread(
-                            _df.xs(lvl, level="scenario").head(10),
-                            vdims=list(_df.columns),
-                            kdims="region",
-                        ).opts(tools=["hover"])
-                        for lvl in _df.index.levels[-1]
-                    },
-                    kdims="scenarios",
-                ).opts(
-                    ylabel=qual_name(_df.columns[0], trans=transmission),
-                    width=500,
-                    height=300,
-                )
-                * hv.Curve(
-                    _df.xs(scenarios[0], level="scenario").head(10),
-                    vdims=_df.columns[0],
+            plots = {
+                lvl: hv.Spread(
+                    _df.xs(lvl, level="scenario").head(10),
+                    vdims=list(_df.columns),
                     kdims="region",
-                ).opts(line_color="black")
+                ).opts(tools=["hover"])
+                for lvl in _df.index.levels[-1]
+            }
+            # fake a line by setting error to zero
+            _noerr = _df.xs(scenarios[0], level="scenario").head(10).assign(errlo=0)
+            # the keys are ordered alphabetically, so choose something that comes later
+            plots["reference"] = hv.Spread(
+                _noerr, vdims=list(_df.columns[:2]), kdims="region"
+            ).opts(line_color="black", fill_color="black", fill_alpha=1, line_width=2)
+            ylabel = qual_name(_df.columns[0], trans=transmission)
+            bands.append(
+                hv.NdOverlay(plots, kdims="scenario group").opts(
+                    ylabel=ylabel, width=500, height=300
+                )
             )
         return bands
 
