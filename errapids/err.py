@@ -376,17 +376,20 @@ def scenario_slice(
 def sorted_join(
     con: pd.Series, prod: pd.Series, sort_first: bool = True
 ) -> pd.DataFrame:
-    def delta_by_region(df):
-        return df.pipe(scenario_deltas).pipe(aggregate2, "technology", "prod")
+    def delta_by_region(df, grp):
+        return df.pipe(scenario_deltas).pipe(aggregate2, "technology", grp)
 
     def delta_by_region_trans(df):
         return df.pipe(scenario_deltas, istransmission=True).pipe(
             aggregate2, "technology", trans=True
         )
 
-    con1 = delta_by_region(con)
+    con1 = delta_by_region(con, "prod")
     con2 = delta_by_region_trans(con)  # export
-    prod1 = delta_by_region(prod)
+    prod1a = delta_by_region(prod, "prod")
+    prod1b = delta_by_region(prod, "hydro")
+    prod1a, prod1b = prod1a.align(prod1b, fill_value=0)
+    prod1 = prod1a + prod1b
     prod2 = delta_by_region_trans(prod)  # import
 
     regions = (
